@@ -50,7 +50,17 @@ class ExtrapolationSolver(ABC):
         substep_seq: (
             NDArray[np.integer]
             | list[int]
-            | Literal["harmonic", "Romberg", "Bulirsch", "harmonic2", "fours", "SODEX"]
+            | Literal[
+                "harmonic",
+                "harmonic_even",
+                "Romberg",
+                "Romberg_even",
+                "Bulirsch",
+                "Bulirsch_even",
+                "harmonic2",
+                "fours",
+                "SODEX",
+            ]
         ),
         is_symmetric: bool,
         table_size: int,
@@ -66,12 +76,12 @@ class ExtrapolationSolver(ABC):
             substep_seq = np.array(substep_seq, dtype=int)
         elif substep_seq == "harmonic":
             substep_seq = np.array(range(1, table_size + 1), dtype=int)
-            if is_symmetric:
-                substep_seq *= 2
+        elif substep_seq == "harmonic_even":
+            substep_seq = 2 * np.array(range(1, table_size + 1), dtype=int)
         elif substep_seq == "Romberg":
             substep_seq = np.array([2**i for i in range(table_size)], dtype=int)
-            if is_symmetric:
-                substep_seq *= 2
+        elif substep_seq == "Romberg_even":
+            substep_seq = 2 * np.array([2**i for i in range(table_size)], dtype=int)
         elif substep_seq == "Bulirsch":
             substep_seq = np.array(
                 [
@@ -80,8 +90,14 @@ class ExtrapolationSolver(ABC):
                 ],
                 dtype=int,
             )
-            if is_symmetric:
-                substep_seq *= 2
+        elif substep_seq == "Bulirsch_even":
+            substep_seq = 2 * np.array(
+                [
+                    2 ** (k // 2) if k % 2 == 0 else 1.5 * 2 ** (k // 2)
+                    for k in range(1, table_size + 1)
+                ],
+                dtype=int,
+            )
         elif substep_seq == "harmonic2":
             substep_seq = np.array(range(2, table_size + 2), dtype=int)
         elif (
@@ -103,10 +119,6 @@ class ExtrapolationSolver(ABC):
         else:
             raise ValueError(f"step sequence of type {substep_seq} is not available.")
 
-        if is_symmetric:
-            assert (
-                substep_seq % 2 == 0
-            ).all(), "step sequence for symmetric methods must be even to reach expected convergence rates"
         self.substep_seq = substep_seq
         self.is_symmetric = is_symmetric
         self.order_exponent = 2 if is_symmetric else 1
@@ -480,7 +492,17 @@ class EulerExtrapolation(ExtrapolationSolver):
         step_controller: StepControllerExtrap | None = None,
         substep_seq: (
             NDArray[np.integer]
-            | Literal["harmonic", "Romberg", "Bulirsch", "harmonic2", "fours", "SODEX"]
+            | Literal[
+                "harmonic",
+                "harmonic_even",
+                "Romberg",
+                "Romberg_even",
+                "Bulirsch",
+                "Bulirsch_even",
+                "harmonic2",
+                "fours",
+                "SODEX",
+]
         ) = "harmonic",
         dtype: DTypeLike = np.double,
     ):
@@ -528,7 +550,17 @@ class EulerExtrapolationMass(ExtrapolationSolver):
         step_controller: StepControllerExtrap | None = None,
         substep_seq: (
             NDArray[np.integer]
-            | Literal["harmonic", "Romberg", "Bulirsch", "harmonic2", "fours", "SODEX"]
+            | Literal[
+                "harmonic",
+                "harmonic_even",
+                "Romberg",
+                "Romberg_even",
+                "Bulirsch",
+                "Bulirsch_even",
+                "harmonic2",
+                "fours",
+                "SODEX",
+]
         ) = "harmonic",
         implicit_rel_costs: ImplicitRelCosts | None = None,
         dtype: DTypeLike = np.double,
@@ -595,8 +627,15 @@ class ModMidpointExtrapolation(ExtrapolationSolver):
         consistency_threshold: float = 0.75,
         substep_seq: (
             NDArray[np.integer]
-            | Literal["harmonic", "Romberg", "Bulirsch", "harmonic2", "fours", "SODEX"]
-        ) = "harmonic",
+            | Literal[
+                "harmonic_even",
+                "Romberg_even",
+                "Bulirsch_even",
+                "harmonic2",
+                "fours",
+                "SODEX",
+]
+        ) = "harmonic_even",
         dtype: DTypeLike = np.double,
     ):
         self.use_smoothing = use_smoothing
@@ -674,8 +713,15 @@ class ModMidpointExtrapolationMass(ExtrapolationSolver):
         consistency_threshold: float = 0.75,
         substep_seq: (
             NDArray[np.integer]
-            | Literal["harmonic", "Romberg", "Bulirsch", "harmonic2", "fours", "SODEX"]
-        ) = "harmonic",
+            | Literal[
+                "harmonic_even",
+                "Romberg_even",
+                "Bulirsch_even",
+                "harmonic2",
+                "fours",
+                "SODEX",
+]
+        ) = "harmonic_even",
         implicit_rel_costs: ImplicitRelCosts | None = None,
         dtype: DTypeLike = np.double,
     ):
@@ -773,8 +819,14 @@ class ModMidpointExtrapolationRational(ModMidpointExtrapolation):
         consistency_threshold: float = 0.75,
         substep_seq: (
             NDArray[np.integer]
-            | Literal["harmonic", "Romberg", "Bulirsch", "harmonic2", "fours", "SODEX"]
-        ) = "Bulirsch",
+            | Literal[
+                "harmonic_even",
+                "Romberg_even",
+                "Bulirsch_even",
+                "fours",
+                "SODEX",
+]
+        ) = "Bulirsch_even",
         dtype: DTypeLike = np.double,
     ):
         super().__init__(
@@ -857,7 +909,16 @@ class LimplicitEulerExtrapolation(ExtrapolationSolver):
         step_controller: StepControllerExtrap | None = None,
         substep_seq: (
             NDArray[np.integer]
-            | Literal["harmonic", "Romberg", "Bulirsch", "harmonic2", "fours", "SODEX"]
+            | Literal                "harmonic",
+                "harmonic_even",
+                "Romberg",
+                "Romberg_even",
+                "Bulirsch",
+                "Bulirsch_even",
+                "harmonic2",
+                "fours",
+                "SODEX",
+]
         ) = "harmonic2",
         mass_matrix: NDArray[np.floating] | None = None,
         num_odes: int | None = None,
@@ -980,7 +1041,17 @@ class LimplicitMidpointExtrapolation(ExtrapolationSolver):
         consistency_threshold: float = 0.75,
         substep_seq: (
             NDArray[np.integer]
-            | Literal["harmonic", "Romberg", "Bulirsch", "fours", "SODEX"]
+            | Literal[
+                "harmonic",
+                "harmonic_even",
+                "Romberg",
+                "Romberg_even",
+                "Bulirsch",
+                "Bulirsch_even",
+                "harmonic2",
+                "fours",
+                "SODEX",
+            ]
         ) = "SODEX",
         mass_matrix: NDArray[np.floating] | None = None,
         num_odes: int | None = None,
