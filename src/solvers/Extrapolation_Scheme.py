@@ -648,6 +648,8 @@ class ModMidpointExtrapolation(ExtrapolationSolver):
             step_controller=step_controller,
             dtype=dtype,
         )
+        if use_smoothing:
+            assert self.substep_seq%2==0, "smoothing requires an even sub step sequence"
         self.norm = self.step_controller.norm
         total_feval_cost_for_k = np.cumsum(
             (self.substep_seq + self.use_smoothing) * 1.0, dtype=self.dtype
@@ -735,6 +737,8 @@ class ModMidpointExtrapolationMass(ExtrapolationSolver):
             step_controller=step_controller,
             dtype=dtype,
         )
+        if use_smoothing:
+            assert self.substep_seq%2==0, "smoothing requires an even sub step sequence"
         self.norm = self.step_controller.norm
         self._init_implicit(
             num_odes=mass_matrix.shape[0],
@@ -838,6 +842,8 @@ class ModMidpointExtrapolationRational(ModMidpointExtrapolation):
             substep_seq=substep_seq,
             dtype=dtype,
         )
+        if use_smoothing:
+            assert self.substep_seq%2==0, "smoothing requires an even sub step sequence"
 
         self.coeffs_extrap = np.array(
             [
@@ -1078,6 +1084,8 @@ class LimplicitMidpointExtrapolation(ExtrapolationSolver):
                 mass_matrix is not None
             ), "either mass matrix or the number of ODEs has to be specified"
             num_odes = mass_matrix.shape[0]
+        if use_smoothing:
+            assert self.substep_seq%2==0, "smoothing requires an even sub step sequence"
         self._init_implicit(
             num_odes=num_odes,  # type: ignore
             require_jacobian=True,
