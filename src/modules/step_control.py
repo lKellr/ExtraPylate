@@ -533,9 +533,10 @@ class StepControllerExtrapKH_HW(StepControllerExtrap):
         return next_ktarget, next_step_mult
 
 
-class StepControllerExtrapKH_Deuflhard(StepControllerExtrapKH):
+class StepControllerExtrapKH_Deuflhard(StepControllerExtrapKH_HW):
     """Combined order and step size (k-h) controller for extrapolation methods. Following the strategy by Deulfhard, "Order and Stepsize Control in Extrapolation Methods", 1983.
-    The main difference to the strategy in the StepControllerExtrapKH is that its always possible to reduce the order down to k_min, instead of staying in the check window """
+    The main difference to the strategy in the StepControllerExtrapKH_HW is that its always possible to reduce the order down to k_min, instead of staying in the check window
+    """
 
     def __init__(
         self,
@@ -687,6 +688,7 @@ class StepControllerExtrapKH_Deuflhard(StepControllerExtrapKH):
     #         next_ktarget = k_final
     #         next_step_mult = s_check
     #     return next_ktarget, next_step_mult
+
 
 class StepControllerExtrapH(StepControllerExtrap):
     """Step size controller with constant order for extrapolation methods, the order can however change from step to step. Step size is controlled by an unsophisticated I-controller.

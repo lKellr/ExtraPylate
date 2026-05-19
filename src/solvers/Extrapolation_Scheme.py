@@ -592,6 +592,7 @@ class ModMidpointExtrapolation(ExtrapolationSolver):
         table_size: int = 10,
         step_controller: StepControllerExtrap | None = None,
         use_smoothing: bool = False,
+        consistency_threshold: float = 0.75,
         substep_seq: (
             NDArray[np.integer]
             | Literal["harmonic", "Romberg", "Bulirsch", "harmonic2", "fours", "SODEX"]
@@ -599,6 +600,7 @@ class ModMidpointExtrapolation(ExtrapolationSolver):
         dtype: DTypeLike = np.double,
     ):
         self.use_smoothing = use_smoothing
+        self.consistency_threshold = consistency_threshold
         super().__init__(
             ode_fun=ode_fun,
             substep_seq=substep_seq,
@@ -607,6 +609,7 @@ class ModMidpointExtrapolation(ExtrapolationSolver):
             step_controller=step_controller,
             dtype=dtype,
         )
+        self.norm = self.step_controller.norm
         total_feval_cost_for_k = np.cumsum(
             (self.substep_seq + self.use_smoothing) * 1.0, dtype=self.dtype
         )
@@ -632,18 +635,25 @@ class ModMidpointExtrapolation(ExtrapolationSolver):
         ddelta_x_n = delta_t * self.ode_fun(t0, x0)  # start with an Euler step
         t_n = t0 + delta_t
         for _ in range(1, n_steps):
-            swaptemp_ddelta_x_n = ddelta_x_n.copy()
+            swaptemp_ddelta_x_n = ddelta_x_n
             ddelta_x_n = ddelta_x_prev + 2 * delta_t * self.ode_fun(
                 t_n, x0 + ddelta_x_n
             )
             ddelta_x_prev = swaptemp_ddelta_x_n
             t_n += delta_t
         if self.use_smoothing:
+            swaptemp_ddelta_x_n = ddelta_x_n
             ddelta_x_n = 0.5 * (
                 ddelta_x_n
                 + ddelta_x_prev
                 + delta_t * self.ode_fun(t_n, x0 + ddelta_x_n)
             )
+            if (
+                self.norm((swaptemp_ddelta_x_n - ddelta_x_n) / x0)
+                > self.consistency_threshold
+            ):
+                return ddelta_x_n, True
+
         return ddelta_x_n, False
 
 
@@ -661,6 +671,7 @@ class ModMidpointExtrapolationMass(ExtrapolationSolver):
         table_size: int = 10,
         step_controller: StepControllerExtrap | None = None,
         use_smoothing: bool = False,
+        consistency_threshold: float = 0.75,
         substep_seq: (
             NDArray[np.integer]
             | Literal["harmonic", "Romberg", "Bulirsch", "harmonic2", "fours", "SODEX"]
@@ -669,6 +680,7 @@ class ModMidpointExtrapolationMass(ExtrapolationSolver):
         dtype: DTypeLike = np.double,
     ):
         self.use_smoothing = use_smoothing
+        self.consistency_threshold = consistency_threshold
         super().__init__(
             ode_fun=ode_fun,
             substep_seq=substep_seq,
@@ -677,6 +689,7 @@ class ModMidpointExtrapolationMass(ExtrapolationSolver):
             step_controller=step_controller,
             dtype=dtype,
         )
+        self.norm = self.step_controller.norm
         self._init_implicit(
             num_odes=mass_matrix.shape[0],
             require_jacobian=False,
@@ -717,17 +730,18 @@ class ModMidpointExtrapolationMass(ExtrapolationSolver):
         )  # start with an Euler step
         t_n = t0 + delta_t
         for _ in range(1, n_steps):
-            temp_ddelta_x_n = ddelta_x_n
+            swaptemp_ddelta_x_n = ddelta_x_n
             ddelta_x_n = ddelta_x_prev + lu_solve(
                 self.lu_and_piv_mass,
                 2 * delta_t * self.ode_fun(t_n, x0 + ddelta_x_n),
                 overwrite_b=True,
                 check_finite=False,
             )
-            ddelta_x_prev = temp_ddelta_x_n
+            ddelta_x_prev = swaptemp_ddelta_x_n
 
             t_n += delta_t
         if self.use_smoothing:
+            swaptemp_ddelta_x_n = ddelta_x_n
             ddelta_x_n = 0.5 * (
                 ddelta_x_n
                 + ddelta_x_prev
@@ -738,6 +752,12 @@ class ModMidpointExtrapolationMass(ExtrapolationSolver):
                     check_finite=False,
                 )
             )
+            if (
+                self.norm((swaptemp_ddelta_x_n - ddelta_x_n) / x0)
+                > self.consistency_threshold
+            ):
+                return ddelta_x_n, True
+
         return ddelta_x_n, False
 
 
@@ -750,18 +770,20 @@ class ModMidpointExtrapolationRational(ModMidpointExtrapolation):
         table_size: int = 10,
         step_controller: StepControllerExtrap | None = None,
         use_smoothing: bool = True,
+        consistency_threshold: float = 0.75,
         substep_seq: (
             NDArray[np.integer]
             | Literal["harmonic", "Romberg", "Bulirsch", "harmonic2", "fours", "SODEX"]
         ) = "Bulirsch",
         dtype: DTypeLike = np.double,
     ):
-        self.use_smoothing = use_smoothing
         super().__init__(
             ode_fun=ode_fun,
-            substep_seq=substep_seq,
             table_size=table_size,
             step_controller=step_controller,
+            use_smoothing=use_smoothing,
+            consistency_threshold=consistency_threshold,
+            substep_seq=substep_seq,
             dtype=dtype,
         )
 
@@ -955,6 +977,7 @@ class LimplicitMidpointExtrapolation(ExtrapolationSolver):
         ) = None,
         step_controller: StepControllerExtrap | None = None,
         use_smoothing: bool = False,
+        consistency_threshold: float = 0.75,
         substep_seq: (
             NDArray[np.integer]
             | Literal["harmonic", "Romberg", "Bulirsch", "fours", "SODEX"]
@@ -965,6 +988,7 @@ class LimplicitMidpointExtrapolation(ExtrapolationSolver):
         dtype: DTypeLike = np.double,
     ):
         self.use_smoothing = use_smoothing
+        self.consistency_threshold = consistency_threshold
         super().__init__(
             ode_fun=ode_fun,
             substep_seq=substep_seq,
@@ -1065,8 +1089,8 @@ class LimplicitMidpointExtrapolation(ExtrapolationSolver):
             solve_final = lu_solve(
                 lu_and_piv, rhs, overwrite_b=True, check_finite=False
             )  # NOTE: this is not delta_x_final (delta_x_final = delta_x + solve_final)
-            ddelta_x_n += (
-                0.5 * solve_final
-            )  # TODO: SHampine performs a consistency check here by checking norm(0.5 * solve_final) < 0.75
+            ddelta_x_n += 0.5 * solve_final
+            if self.norm(0.5 * solve_final / x0) > self.consistency_threshold:
+                return ddelta_x_n, True
 
         return ddelta_x_n, False
