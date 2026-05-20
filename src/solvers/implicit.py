@@ -1,3 +1,4 @@
+from functools import partial
 import logging
 
 from typing import Callable, Any
@@ -28,7 +29,9 @@ def Backwards_Euler(
         ],
         tuple[NDArray[np.floating], dict[str, Any]],
     ] = NewtonODE,
-    jac_fun: Callable[[NDArray[np.floating]], NDArray[np.floating]] | None = None,
+    jac_fun: (
+        Callable[[float, NDArray[np.floating]], NDArray[np.floating]] | None
+    ) = None,
     solvertol: float = 1e-5,
 ) -> tuple[NDArray[np.floating], NDArray[np.floating], dict[str, Any]]:
     """Backwards Euler Method. System of Equations solved by solver(ode_fun==0, a, b, tol_iter)"""
@@ -45,21 +48,47 @@ def Backwards_Euler(
         n_restarts=0,
     )
 
+    if jac_fun is None:
+        jac_fun = lambda t, x: numerical_jacobian_t(
+            t,
+            x,
+            ode_fun,
+            delta=1e-8,
+        )
+
+    def f_imp_Newton(
+        x_next: NDArray[np.floating], t_i: float, x_i: NDArray[np.floating]
+    ):
+        return x_next - x_i - h * ode_fun(t_i, x_next)
+
+    if jac_fun is None:
+
+        def jac_imp_Newton(x_next: NDArray[np.floating], t_i: float):
+            return np.eye(x0.shape[0]) - h * numerical_jacobian_t(
+                t_i,
+                x_next,
+                ode_fun,
+                delta=1e-8,
+            )
+
+    else:
+
+        def jac_imp_Newton(x_next: NDArray[np.floating], t_i: float):
+            return np.eye(x0.shape[0]) - h * jac_fun(t_i, x_next)
+
     t = np.linspace(t0, steps * h, steps + 1, dtype=x0.dtype)
     x = np.zeros((steps + 1, x0.shape[0]), dtype=x0.dtype)
 
     x[0] = x0
     sol_info = dict(eta=np.inf)
     for i in range(steps):
-
-        def f_imp(x_next):
-            return x_next - x[i] - h * ode_fun(t[i + 1], x_next)
-
+        # f_imp = lambda x_next: x_next - x[i] - h * ode_fun(t[i + 1], x_next)
+        # jac_imp = lambda x_next: np.eye(x0.shape[0]) - h * jac_fun(t[i + 1], x_next)
         x[i + 1], success, sol_info = nl_solver(
-            f_imp,
+            fun=partial(f_imp_Newton, t_i=t[i + 1], x_i=x[i]),
             x0=x[i],
             tol_iter=norm_hairer(solvertol * x[i]) + solvertol,
-            jac_fun=jac_fun,
+            jac_fun=partial(jac_imp_Newton, t_i=t[i + 1]),
             norm=norm_hairer,
             eta_old=sol_info["eta"],
         )
@@ -82,6 +111,8 @@ def AM_k(
     h: float,
     k: int,
     t0: float = 0.0,
+    x_start: NDArray[np.floating] | None = None,
+    f_start: NDArray[np.floating] | None = None,
     nl_solver: Callable[
         [
             Callable[[NDArray[np.floating]], NDArray[np.floating]],
@@ -91,7 +122,9 @@ def AM_k(
         ],
         tuple[NDArray[np.floating], dict[str, Any]],
     ] = NewtonODE,
-    jac_fun: Callable[[NDArray[np.floating]], NDArray[np.floating]] | None = None,
+    jac_fun: (
+        Callable[[float, NDArray[np.floating]], NDArray[np.floating]] | None
+    ) = None,
     solvertol: float = 1e-5,
 ) -> tuple[NDArray[np.floating], NDArray[np.floating], dict[str, Any]]:
     """Adams-Moulton formula of variable order k, maximum implemented is 9"""
@@ -107,7 +140,19 @@ def AM_k(
         k = steps
 
     t = np.linspace(t0, steps * h, steps + 1, dtype=x0.dtype)
-    x, info, f_values = _AM_k(ode_fun=ode_fun, x0=x0, steps=steps, h=h, k=k, t0=t0)
+    x, info, _ = _AM_k(
+        ode_fun=ode_fun,
+        x0=x0,
+        steps=steps,
+        h=h,
+        k=k,
+        t0=t0,
+        x_start=x_start,
+        f_start=f_start,
+        nl_solver=nl_solver,
+        jac_fun=jac_fun,
+        solvertol=solvertol,
+    )
     return t, x, info
 
 
@@ -118,6 +163,8 @@ def _AM_k(
     h: float,
     k: int,
     t0: float = 0.0,
+    x_start: NDArray[np.floating] | None = None,
+    f_start: NDArray[np.floating] | None = None,
     nl_solver: Callable[
         [
             Callable[[NDArray[np.floating]], NDArray[np.floating]],
@@ -127,7 +174,9 @@ def _AM_k(
         ],
         tuple[NDArray[np.floating], dict[str, Any]],
     ] = NewtonODE,
-    jac_fun: Callable[[NDArray[np.floating]], NDArray[np.floating]] | None = None,
+    jac_fun: (
+        Callable[[float, NDArray[np.floating]], NDArray[np.floating]] | None
+    ) = None,
     solvertol: float = 1e-5,
 ) -> tuple[NDArray[np.floating], dict[str, Any], NDArray[np.floating]]:
     """Adams-Moulton of variable order k, this function also returns the computed function values"""
@@ -139,6 +188,30 @@ def _AM_k(
         n_lu=0,
         n_restarts=0,
     )
+
+    def f_imp_Newton(
+        x_next: NDArray[np.floating], t_i: float, f_const: NDArray[np.floating]
+    ) -> NDArray[np.floating]:
+        return x_next - (f_const + h * beta[0] * ode_fun(t_i, x_next))
+
+    if jac_fun is None:
+
+        def jac_imp_Newton(
+            x_next: NDArray[np.floating], t_i: float
+        ) -> NDArray[np.floating]:
+            return np.eye(x_next.shape[0]) - h * beta[0] * numerical_jacobian_t(
+                t_i,
+                x_next,
+                ode_fun,
+                delta=1e-8,
+            )
+
+    else:
+
+        def jac_imp_Newton(
+            x_next: NDArray[np.floating], t_i: float
+        ) -> NDArray[np.floating]:
+            return np.eye(x_next.shape[0]) - h * beta[0] * jac_fun(t_i, x_next)
 
     # compute the coefficients
     gamma = [
@@ -159,48 +232,52 @@ def _AM_k(
             for j in range(1, k + 1)
         ]
     )
-    # TODO: i am not sure about the (-1)**j term, it is not given in my ource, but results are wrong without it
+    # NOTE: i am not sure about the (-1)**j term, it is not given in the Flaherty lecture notes, but results are wrong without it
 
     x = np.zeros((steps + 1, x0.shape[0]), dtype=x0.dtype)
     f_i = np.empty((k, x0.shape[0]), dtype=x0.dtype)
-    if k > 2:
-        x[: k - 1], inf_starter, f_i[: k - 1] = _AM_k(ode_fun, x0, k - 2, h, k - 1, t0)
-        info = inf_starter
-    else:  # start with trapezoidal rule
+
+    if k <= 1:  # start with the trapezoidal rule
         x[0] = x0
         f_i[0] = ode_fun(t0, x0)
+    elif x_start is not None:
+        assert x_start.shape == (
+            k - 1,
+            x0.shape[0],
+        ), "wrong shape of starting values"
+        assert x_start[0] == x0, "first value of x_start must equal x0"
+        x[: k - 1] = x_start
+        if f_start is not None:
+            assert f_start.shape == (
+                k - 1,
+                x0.shape[0],
+            ), "wrong shape of starting values"
+            f_i[: k - 1] = f_start[::-1]
+        else:
+            for i in range(k - 1):
+                f_i[k - 2 - i] = ode_fun(t0 + i * h, x_start[i])
+
+    else:
+        x[: k - 1], inf_starter, f_i[: k - 1] = _AM_k(ode_fun, x0, k - 2, h, k - 1, t0)
+        info = inf_starter
 
     steps_starter = k - 2 if k > 1 else 0
     sol_info = dict(eta=np.inf)
     for i in range(steps_starter, steps):
         f_i = np.roll(f_i, 1, axis=0)
 
-        if k > 1:  # precompute the constant part
-            f_const = x[i] + h * beta[1:] @ f_i[1:]
-        else:
-            f_const = x[i]
-
-        def f_imp(x_next):
-            f_i[0] = ode_fun(t0 + (i + 1) * h, x_next)
-            return x_next - (f_const + h * beta[0] * f_i[0])
-
-        if (
-            jac_fun is None
-        ):  # Jacobian without setting f_i[0] # TODO: this is probably not efficient
-
-            def jac_fun(x_next):
-                return np.eye(x_next.shape[0]) - h * beta[0] * numerical_jacobian_t(
-                    t0 + (i + 1) * h, x_next, ode_fun, 1e-8
-                )
-
+        f_const = (
+            x[i] + h * beta[1:] @ f_i[1:] if k > 1 else x[i]
+        )  # precompute the constant part
         x[i + 1], success, sol_info = nl_solver(
-            f_imp,
+            fun=partial(f_imp_Newton, t_i=t0 + (i + 1) * h, f_const=f_const),
             x0=x[i],
             tol_iter=norm_hairer(solvertol * x[i]) + solvertol,
-            jac_fun=jac_fun,
+            jac_fun=partial(jac_imp_Newton, t_i=t0 + (i + 1) * h),
             norm=norm_hairer,
             eta_old=sol_info["eta"],
         )
+        f_i[0] = ode_fun(t0 + (i + 1) * h, x[i + 1])
 
         if not success:
             logger.warning("solver did not converge")
@@ -217,6 +294,7 @@ def BDF2(
     t_max: float,
     h: float,
     t0: float = 0.0,
+    x_start: NDArray[np.floating] | None = None,
     nl_solver: Callable[
         [
             Callable[[NDArray[np.floating]], NDArray[np.floating]],
@@ -226,7 +304,9 @@ def BDF2(
         ],
         tuple[NDArray[np.floating], dict[str, Any]],
     ] = NewtonODE,
-    jac_fun: Callable[[NDArray[np.floating]], NDArray[np.floating]] | None = None,
+    jac_fun: (
+        Callable[[float, NDArray[np.floating]], NDArray[np.floating]] | None
+    ) = None,
     solvertol: float = 1e-5,
 ) -> tuple[NDArray[np.floating], NDArray[np.floating], dict[str, Any]]:
     """Backward differantiation Formula of order 2 for stiff systems.
@@ -245,34 +325,64 @@ def BDF2(
         n_restarts=0,
     )
 
-    t = np.linspace(t0, steps * h, steps + 1, dtype=x0.dtype)
-    x = np.zeros((steps + 1, x0.shape[0]), dtype=x0.dtype)
-    t[:2], x[:2], inf_starter = Backwards_Euler(
-        ode_fun=ode_fun,
-        x0=x0,
-        t_max=t0 + h,
-        h=h,
-        t0=t0,
-        nl_solver=nl_solver,
-        solvertol=solvertol,
-    )
-    info = inf_starter
-    sol_info = dict(eta=np.inf)
-    for i in range(1, steps):
+    def f_imp_Newton(
+        x_next: NDArray[np.floating],
+        t_i: float,
+        x_i: NDArray[np.floating],
+        x_ii: NDArray[np.floating],
+    ) -> NDArray[np.floating]:
+        return x_next - 4 / 3 * x_i + 1 / 3 * x_ii - 2 / 3 * h * ode_fun(t_i, x_next)
 
-        def f_imp(x_next):
-            return (
-                x_next
-                - 4 / 3 * x[i]
-                + 1 / 3 * x[i - 1]
-                - 2 / 3 * h * ode_fun(t[i + 1], x_next)
+    if jac_fun is None:
+
+        def jac_imp_Newton(
+            x_next: NDArray[np.floating], t_i: float
+        ) -> NDArray[np.floating]:
+            return np.eye(x0.shape[0]) - 2 / 3 * h * numerical_jacobian_t(
+                t_i,
+                x_next,
+                ode_fun,
+                delta=1e-8,
             )
 
+    else:
+
+        def jac_imp_Newton(
+            x_next: NDArray[np.floating], t_i: float
+        ) -> NDArray[np.floating]:
+            return np.eye(x0.shape[0]) - 2 / 3 * h * jac_fun(
+                t_i,
+                x_next,
+            )
+
+    t = np.linspace(t0, steps * h, steps + 1, dtype=x0.dtype)
+    x = np.zeros((steps + 1, x0.shape[0]), dtype=x0.dtype)
+
+    if x_start is not None:
+        assert x_start.shape == (
+            2,
+            x0.shape[0],
+        ), "wrong shape of starting values"
+        assert x_start[0] == x0, "first value of x_start must equal x0"
+        x[:2] = x_start
+    else:
+        t[:2], x[:2], inf_starter = Backwards_Euler(
+            ode_fun=ode_fun,
+            x0=x0,
+            t_max=t0 + h,
+            h=h,
+            t0=t0,
+            nl_solver=nl_solver,
+            solvertol=solvertol,
+        )
+        info = inf_starter
+
+    for i in range(1, steps):
         x[i + 1], success, sol_info = nl_solver(
-            f_imp,
+            partial(f_imp_Newton, t_i=t[i + 1], x_i=x[i], x_ii=x[i - 1]),
             x0=x[i],
             tol_iter=norm_hairer(solvertol * x[i]) + solvertol,
-            jac_fun=jac_fun,
+            jac_fun=partial(jac_imp_Newton, t_i=t[i + 1]),
             norm=norm_hairer,
             eta_old=sol_info["eta"],
         )
@@ -301,7 +411,9 @@ def TRBDF2(
         ],
         tuple[NDArray[np.floating], dict[str, Any]],
     ] = NewtonODE,
-    jac_fun: Callable[[NDArray[np.floating]], NDArray[np.floating]] | None = None,
+    jac_fun: (
+        Callable[[float, NDArray[np.floating]], NDArray[np.floating]] | None
+    ) = None,
 ) -> tuple[NDArray[np.floating], NDArray[np.floating], dict[str, Any]]:
     """Combination of the trapezoidal method with BDF2 to get a DIRK scheme,
     see "Analysis and implementation of TR-BDF2", Hosea and Shampine 1996"""
@@ -318,6 +430,70 @@ def TRBDF2(
         n_restarts=0,
     )
 
+    def f_imp_Newton1(
+        x_halftrapz: NDArray[np.floating], t_i: float, x_i: NDArray[np.floating]
+    ) -> NDArray[np.floating]:
+        return x_halftrapz - (
+            x_i + 0.25 * h * (ode_fun(t_i, x_i) + ode_fun(t_i + 0.5 * h, x_halftrapz))
+        )
+
+    def f_imp_Newton2(
+        x_next: NDArray[np.floating],
+        t_i: float,
+        x_i: NDArray[np.floating],
+        x_halftrapz: NDArray[np.floating],
+    ) -> NDArray[np.floating]:
+        return (
+            x_next
+            - 1.0
+            / 3.0
+            * (
+                4 * x_halftrapz
+                - x_i
+                + h
+                * ode_fun(
+                    t_i + h, x_next
+                )  # Note that the step is here half of what it is in the normal BDF2 scheme!
+            )
+        )
+
+    if jac_fun is None:
+
+        def jac_imp_Newton1(
+            x_next: NDArray[np.floating], t_i: float
+        ) -> NDArray[np.floating]:
+            return np.eye(x0.shape[0]) - numerical_jacobian_t(
+                t_i + 0.5 * h,
+                x_next,
+                ode_fun,
+                delta=1e-8,
+            )
+
+        def jac_imp_Newton2(
+            x_next: NDArray[np.floating], t_i: float
+        ) -> NDArray[np.floating]:
+            return np.eye(x0.shape[0]) - 1 / 3 * h * numerical_jacobian_t(
+                t_i + h,
+                x_next,
+                ode_fun,
+                delta=1e-8,
+            )
+
+    else:
+
+        def jac_imp_Newton1(
+            x_next: NDArray[np.floating], t_i: float
+        ) -> NDArray[np.floating]:
+            return np.eye(x0.shape[0]) - jac_fun(t_i + 0.5 * h, x_next)
+
+        def jac_imp_Newton2(
+            x_next: NDArray[np.floating], t_i: float
+        ) -> NDArray[np.floating]:
+            return np.eye(x0.shape[0]) - 1 / 3 * h * jac_fun(
+                t_i + h,
+                x_next,
+            )
+
     t = np.linspace(t0, steps * h, steps + 1, dtype=x0.dtype)
     x = np.zeros((steps + 1, x0.shape[0]), dtype=x0.dtype)
 
@@ -325,20 +501,11 @@ def TRBDF2(
     sol1_info = dict(eta=np.inf)
     sol2_info = dict(eta=np.inf)
     for i in range(steps):
-
-        def f_imp1(x_halftrapz):
-            return x_halftrapz - (
-                x[i]
-                + 0.25
-                * h
-                * (ode_fun(t[i], x[i]) + ode_fun(t[i] + 0.5 * h, x_halftrapz))
-            )
-
         x_halftrapz, success, sol1_info = nl_solver(
-            f_imp1,
+            partial(f_imp_Newton1, t_i=t[i + 1], x_i=x[i]),
             x0=x[i],
             tol_iter=norm_hairer(solvertol * x[i]) + solvertol,
-            jac_fun=jac_fun,
+            jac_fun=partial(jac_imp_Newton1, t_i=t[i]),
             norm=norm_hairer,
             eta_old=sol1_info["eta"],
         )
@@ -349,26 +516,11 @@ def TRBDF2(
         info["n_jaceval"] += sol1_info["n_jaceval"]
         info["n_lu"] += sol1_info["n_lu"]
 
-        def f_imp2(x_next):
-            return (
-                x_next
-                - 1.0
-                / 3.0
-                * (
-                    4 * x_halftrapz
-                    - x[i]
-                    + h
-                    * ode_fun(
-                        t[i + 1], x_next
-                    )  # Note that the step is here half of what it is in the normal BDF2 scheme!
-                )
-            )
-
         x[i + 1], success, sol2_info = nl_solver(
-            f_imp2,
+            partial(f_imp_Newton2, t_i=t[i], x_i=x[i], x_halftrapz=x_halftrapz),
             x0=x_halftrapz,
             tol_iter=norm_hairer(solvertol * x[i]) + solvertol,
-            jac_fun=jac_fun,
+            jac_fun=partial(jac_imp_Newton2, t_i=t[i]),
             norm=norm_hairer,
             eta_old=sol2_info["eta"],
         )
@@ -387,6 +539,7 @@ def BDF3(
     t_max: float,
     h: float,
     t0: float = 0.0,
+    x_start: NDArray[np.floating] | None = None,
     nl_solver: Callable[
         [
             Callable[[NDArray[np.floating]], NDArray[np.floating]],
@@ -396,7 +549,9 @@ def BDF3(
         ],
         tuple[NDArray[np.floating], dict[str, Any]],
     ] = NewtonODE,
-    jac_fun: Callable[[NDArray[np.floating]], NDArray[np.floating]] | None = None,
+    jac_fun: (
+        Callable[[float, NDArray[np.floating]], NDArray[np.floating]] | None
+    ) = None,
     solvertol: float = 1e-5,
 ) -> tuple[NDArray[np.floating], NDArray[np.floating], dict[str, Any]]:
     """Backward differantiation Formula of order 3 for stiff systems.
@@ -415,36 +570,70 @@ def BDF3(
         n_restarts=0,
     )
 
-    t = np.linspace(t0, steps * h, steps + 1, dtype=x0.dtype)
-    x = np.zeros((steps + 1, x0.shape[0]), dtype=x0.dtype)
-    t[:3], x[:3], inf_starter = BDF2(
-        ode_fun=ode_fun,
-        x0=x0,
-        t_max=t0 + 2 * h,
-        h=h,
-        t0=t0,
-        nl_solver=nl_solver,
-        solvertol=solvertol,
-        jac_fun=jac_fun,
-    )
-    info = inf_starter
-    sol_info = dict(eta=np.inf)
-    for i in range(2, steps):
+    def f_imp_Newton(
+        x_next: NDArray[np.floating],
+        t_i: float,
+        x_i: NDArray[np.floating],
+        x_ii: NDArray[np.floating],
+        x_iii: NDArray[np.floating],
+    ) -> NDArray[np.floating]:
+        return (
+            11 * x_next - 18 * x_i + 9 * x_ii - 2 * x_iii - 6 * h * ode_fun(t_i, x_next)
+        )
 
-        def f_imp(x_next):
-            return (
-                11 * x_next
-                - 18 * x[i]
-                + 9 * x[i - 1]
-                - 2 * x[i - 2]
-                - 6 * h * ode_fun(t[i + 1], x_next)
+    if jac_fun is None:
+
+        def jac_imp_Newton(
+            x_next: NDArray[np.floating], t_i: float
+        ) -> NDArray[np.floating]:
+            return 11 * np.eye(x0.shape[0]) - 6 * h * numerical_jacobian_t(
+                t_i,
+                x_next,
+                ode_fun,
+                delta=1e-8,
             )
 
+    else:
+
+        def jac_imp_Newton(
+            x_next: NDArray[np.floating], t_i: float
+        ) -> NDArray[np.floating]:
+            return 11 * np.eye(x0.shape[0]) - 6 * h * jac_fun(
+                t_i,
+                x_next,
+            )
+
+    t = np.linspace(t0, steps * h, steps + 1, dtype=x0.dtype)
+    x = np.zeros((steps + 1, x0.shape[0]), dtype=x0.dtype)
+
+    if x_start is not None:
+        assert x_start.shape == (
+            3,
+            x0.shape[0],
+        ), "wrong shape of starting values"
+        assert x_start[0] == x0, "first value of x_start must equal x0"
+        x[:3] = x_start
+    else:
+        t[:3], x[:3], inf_starter = BDF2(
+            ode_fun=ode_fun,
+            x0=x0,
+            t_max=t0 + 2 * h,
+            h=h,
+            t0=t0,
+            nl_solver=nl_solver,
+            solvertol=solvertol,
+            jac_fun=jac_fun,
+        )
+        info = inf_starter
+
+    for i in range(2, steps):
         x[i + 1], success, sol_info = nl_solver(
-            f_imp,
+            partial(
+                f_imp_Newton, t_i=t[i + 1], x_i=x[i], x_ii=x[i - 1], x_iii=x[i - 2]
+            ),
             x0=x[i],
             tol_iter=norm_hairer(solvertol * x[i]) + solvertol,
-            jac_fun=jac_fun,
+            jac_fun=partial(jac_imp_Newton, t_i=t[i + 1]),
             norm=norm_hairer,
             eta_old=sol_info["eta"],
         )
