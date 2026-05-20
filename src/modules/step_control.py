@@ -252,18 +252,23 @@ class StepControllerExtrap(StepController, ABC):
         self,
         is_symmetric: bool,
         table_size: int,
-        err_reduction_at_step: NDArray[np.floating],
+        substep_seq: NDArray[np.integer],
         total_feval_cost_for_k: NDArray[np.floating],
+        local_order_func: Callable[[int], int],
     ):
         self.is_symmetric = is_symmetric
         self.table_size = table_size
-        self.err_reduction_at_step = err_reduction_at_step
         self.total_feval_cost_for_k = total_feval_cost_for_k
         self.k_min = 1
         self.k_max = table_size - 1
 
+        self.order_exponents: NDArray[np.floating] = np.array(
+            [1.0 / (local_order_func(k) + 1) for k in range(self.table_size)]
+        )
+
     def get_initial_ktarget(self) -> int:
-        """very rough estimate from numerical recipes, can be motivated for example from Hairer&Wanner Fig.9.5"""
+        """very rough estimate from numerical recipes, can be motivated for example from Hairer&Wanner II, Fig.4.1"""
+
         if self.is_symmetric:
             log_fact = -max(-12.0, np.log10(self.rtol)) * 0.6 + 0.5
         else:
@@ -273,16 +278,14 @@ class StepControllerExtrap(StepController, ABC):
 
     def _get_step_mult_opt(self, err_ratio_k: float, next_k: int) -> float:
         """returns the optimal factor by which the step should be multiplied to reach the prescribed tolerance levels"""
-        order_exponent = (
-            1.0 / (2 * next_k + 1) if self.is_symmetric else 1.0 / (next_k + 1)
-        )  # NOTE: 2*k+1 since k starts at zero. Hairer&Wanner use 2*k-1 for k starting with 1
-        temp_s_limit_descaled = self.s_limits_scaled[0] ** order_exponent
+        temp_s_limit_descaled = self.s_limits_scaled[0] ** self.order_exponents[next_k]
 
         if err_ratio_k == 0:
             s_opt = 1 / temp_s_limit_descaled
         else:
             s_opt = (
-                self.safety_unscaled * (self.safety_tol / err_ratio_k) ** order_exponent
+                self.safety_unscaled
+                * (self.safety_tol / err_ratio_k) ** self.order_exponents[next_k]
             )
             s_opt = clip(
                 s_opt,
@@ -386,14 +389,28 @@ class StepControllerExtrapKH_HW(StepControllerExtrap):
         self,
         is_symmetric: bool,
         table_size: int,
-        err_reduction_at_step: NDArray[np.floating],
+        substep_seq: NDArray[np.integer],
         total_feval_cost_for_k: NDArray[np.floating],
+        local_order_func: Callable[[int], int],
     ):
         super().initialize_scheme(
-            is_symmetric, table_size, err_reduction_at_step, total_feval_cost_for_k
+            is_symmetric,
+            table_size,
+            substep_seq,
+            total_feval_cost_for_k,
+            local_order_func,
         )
         self.k_min = 2
         self.k_max = table_size - 1  # NOTE: Hairer & Wanner use table_size - 2
+
+        order_exponent = 2 if is_symmetric else 1
+        self.err_reduction_at_step = np.array(
+            [
+                (substep_seq[k] / substep_seq[0]) ** order_exponent
+                for k in range(1, self.table_size)
+            ],
+            dtype=self.dtype,
+        )  # NOTE: first entry is never used
 
         self.error_ratios_k = np.empty((table_size - 1,), self.dtype)
 
@@ -724,15 +741,25 @@ class StepControllerExtrapH(StepControllerExtrap):
         self,
         is_symmetric: bool,
         table_size: int,
-        err_reduction_at_step: NDArray[np.floating],
+        substep_seq: NDArray[np.integer],
         total_feval_cost_for_k: NDArray[np.floating],
+        local_order_func: Callable[[int], int],
     ):
         super().initialize_scheme(
             is_symmetric,
             table_size,
-            err_reduction_at_step,
+            substep_seq,
             total_feval_cost_for_k,
+            local_order_func,
         )
+        order_exponent = 2 if is_symmetric else 1
+        self.err_reduction_at_step = np.array(
+            [
+                (substep_seq[k] / substep_seq[0]) ** order_exponent
+                for k in range(1, self.table_size)
+            ],
+            dtype=self.dtype,
+        )  # NOTE: first entry is never used
 
     def evaluate_step(
         self,
@@ -822,16 +849,26 @@ class StepControllerExtrapK(StepControllerExtrap):
         self,
         is_symmetric: bool,
         table_size: int,
-        err_reduction_at_step: NDArray[np.floating],
+        substep_seq: NDArray[np.integer],
         total_feval_cost_for_k: NDArray[np.floating],
+        local_order_func: Callable[[int], int],
     ):
         super().initialize_scheme(
             is_symmetric,
             table_size,
-            err_reduction_at_step,
+            substep_seq,
             total_feval_cost_for_k,
+            local_order_func,
         )
         self.k_min = 1
+        order_exponent = 2 if is_symmetric else 1
+        self.err_reduction_at_step = np.array(
+            [
+                (substep_seq[k] / substep_seq[0]) ** order_exponent
+                for k in range(1, self.table_size)
+            ],
+            dtype=self.dtype,
+        )  # NOTE: first entry is never used
 
     @override
     def evaluate_step(
@@ -921,11 +958,16 @@ class StepControllerExtrapDummy(StepControllerExtrap):
         self,
         is_symmetric: bool,
         table_size: int,
-        err_reduction_at_step: NDArray[np.floating],
+        substep_seq: NDArray[np.integer],
         total_feval_cost_for_k: NDArray[np.floating],
+        local_order_func: Callable[[int], int],
     ):
         super().initialize_scheme(
-            is_symmetric, table_size, err_reduction_at_step, total_feval_cost_for_k
+            is_symmetric,
+            table_size,
+            substep_seq,
+            total_feval_cost_for_k,
+            local_order_func,
         )
 
     @override
@@ -999,11 +1041,16 @@ class StepControllerExtrapBulirsch(StepControllerExtrap):
         self,
         is_symmetric: bool,
         table_size: int,
-        err_reduction_at_step: NDArray[np.floating],
+        substep_seq: NDArray[np.integer],
         total_feval_cost_for_k: NDArray[np.floating],
+        local_order_func: Callable[[int], int],
     ):
         super().initialize_scheme(
-            is_symmetric, table_size, err_reduction_at_step, total_feval_cost_for_k
+            is_symmetric,
+            table_size,
+            substep_seq,
+            total_feval_cost_for_k,
+            local_order_func,
         )
         self.k_min = 3
 

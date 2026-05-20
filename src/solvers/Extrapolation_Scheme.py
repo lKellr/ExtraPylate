@@ -63,6 +63,7 @@ class ExtrapolationSolver(ABC):
             ]
         ),
         is_symmetric: bool,
+        local_order_func: Callable[[int], int],
         table_size: int,
         step_controller: StepControllerExtrap | None = None,
         dtype: DTypeLike = np.double,
@@ -122,8 +123,17 @@ class ExtrapolationSolver(ABC):
         self.substep_seq = substep_seq
         self.is_symmetric = is_symmetric
         self.order_exponent = 2 if is_symmetric else 1
+        self.get_local_order = local_order_func
         self.table_size: int = table_size
         self.dtype = dtype
+
+        if is_symmetric:
+            assert all(
+                [
+                    local_order_func(k + 1) - local_order_func(k) == 2
+                    for k in range(self.table_size)
+                ]
+            ), "Symmetric schemes should have local orders proportional to 2k."
 
         # not all entries are needed, only the lower? triangular part and only beginning from j=1, but i cant index a list, so this has to be a padded array
         self.coeffs_Aitken = np.array(
@@ -182,7 +192,7 @@ class ExtrapolationSolver(ABC):
                 t,
                 x,
                 self.ode_fun,
-                delta=1e-8,  # TODO: the delta value might need tuning, for BZ values smaller than 1e-4 are inaccurate
+                delta=1e-9,
             )
             if implicit_rel_costs is None:
                 self.implicit_rel_costs = ImplicitRelCosts(rel_jac_cost=num_odes + 1)
@@ -200,22 +210,6 @@ class ExtrapolationSolver(ABC):
                 and (mm_shape[0] == num_odes)
             ), "mass matrix must be square and dimensions must match num_odes"
             self.mass_matrix = mass_matrix
-
-    def _init_controller(self, total_feval_cost_for_k: NDArray[np.floating]):
-        err_reduction_at_step = np.array(
-            [
-                (self.substep_seq[k] / self.substep_seq[0]) ** self.order_exponent
-                for k in range(1, self.table_size)
-            ],
-            dtype=self.dtype,
-        )  # NOTE: first entry is never used
-
-        self.step_controller.initialize_scheme(
-            self.is_symmetric,
-            self.table_size,
-            err_reduction_at_step,
-            total_feval_cost_for_k,
-        )
 
     def fill_extrapolation_table(
         self,
@@ -324,7 +318,7 @@ class ExtrapolationSolver(ABC):
         )  # When a Jacobian is present, i also perform a LU factorization
         step_info["n_jaceval"] = 1 * self.impl_base_scheme
         step_info["local_error"] = error
-        step_info["local_order"] = k_curr * self.order_exponent + (not is_diverging)
+        step_info["local_order"] = self.get_local_order(k_curr + (not is_diverging))
 
         if logger.isEnabledFor(logging.DEBUG):
             logger.debug(
@@ -372,7 +366,7 @@ class ExtrapolationSolver(ABC):
 
         if h_initial is None:
             step = self.step_controller.get_initial_stepHW(
-                self.ode_fun, x0, t0=t0, p=self.order_exponent - 1.0
+                self.ode_fun, x0, t0=t0, p=self.get_local_order(k_target)
             )
         else:
             step = h_initial
@@ -510,12 +504,19 @@ class EulerExtrapolation(ExtrapolationSolver):
             ode_fun=ode_fun,
             substep_seq=substep_seq,
             is_symmetric=False,
+            local_order_func=lambda k: k + 1,
             table_size=table_size,
             step_controller=step_controller,
             dtype=dtype,
         )
         total_feval_cost_for_k = np.cumsum(self.substep_seq * 1.0, dtype=self.dtype)
-        self._init_controller(total_feval_cost_for_k)
+        self.step_controller.initialize_scheme(
+            is_symmetric=self.is_symmetric,
+            table_size=self.table_size,
+            substep_seq=self.substep_seq,
+            total_feval_cost_for_k=total_feval_cost_for_k,
+            local_order_func=self.get_local_order,
+        )
 
     @override
     def base_scheme(
@@ -569,6 +570,7 @@ class EulerExtrapolationMass(ExtrapolationSolver):
             ode_fun=ode_fun,
             substep_seq=substep_seq,
             is_symmetric=False,
+            local_order_func=lambda k: k + 1,
             table_size=table_size,
             step_controller=step_controller,
             dtype=dtype,
@@ -583,7 +585,13 @@ class EulerExtrapolationMass(ExtrapolationSolver):
             self.substep_seq * (1.0 + self.implicit_rel_costs.rel_backsub_cost),
             dtype=self.dtype,
         )
-        self._init_controller(total_feval_cost_for_k)
+        self.step_controller.initialize_scheme(
+            is_symmetric=self.is_symmetric,
+            table_size=self.table_size,
+            substep_seq=self.substep_seq,
+            total_feval_cost_for_k=total_feval_cost_for_k,
+            local_order_func=self.get_local_order,
+        )
 
         self.lu_and_piv_mass = lu_factor(mass_matrix)
 
@@ -644,17 +652,28 @@ class ModMidpointExtrapolation(ExtrapolationSolver):
             ode_fun=ode_fun,
             substep_seq=substep_seq,
             is_symmetric=True,
+            local_order_func=lambda k: 2 * k + 2,
             table_size=table_size,
             step_controller=step_controller,
             dtype=dtype,
         )
+        even_substep_seq = (self.substep_seq % 2 == 0).all()
+        if not even_substep_seq:
+            self.get_local_order: Callable[[int], int] = lambda k: 2 * k + 1
+            logger.warning("Order reduction due to non-even step sequence")
         if use_smoothing:
-            assert self.substep_seq%2==0, "smoothing requires an even sub step sequence"
+            assert even_substep_seq, "smoothing requires an even sub step sequence"
         self.norm = self.step_controller.norm
         total_feval_cost_for_k = np.cumsum(
             (self.substep_seq + self.use_smoothing) * 1.0, dtype=self.dtype
         )
-        self._init_controller(total_feval_cost_for_k)
+        self.step_controller.initialize_scheme(
+            is_symmetric=self.is_symmetric,
+            table_size=self.table_size,
+            substep_seq=self.substep_seq,
+            total_feval_cost_for_k=total_feval_cost_for_k,
+            local_order_func=self.get_local_order,
+        )
 
     @override
     def _fevals_per_base_solve(self, n_substeps: int) -> int:
@@ -733,12 +752,17 @@ class ModMidpointExtrapolationMass(ExtrapolationSolver):
             ode_fun=ode_fun,
             substep_seq=substep_seq,
             is_symmetric=True,
+            local_order_func=lambda k: 2 * k + 2,
             table_size=table_size,
             step_controller=step_controller,
             dtype=dtype,
         )
+        even_substep_seq = (self.substep_seq % 2 == 0).all()
+        if not even_substep_seq:
+            self.get_local_order: Callable[[int], int] = lambda k: 2 * k + 1
+            logger.warning("Order reduction due to non-even step sequence")
         if use_smoothing:
-            assert self.substep_seq%2==0, "smoothing requires an even sub step sequence"
+            assert even_substep_seq, "smoothing requires an even sub step sequence"
         self.norm = self.step_controller.norm
         self._init_implicit(
             num_odes=mass_matrix.shape[0],
@@ -751,7 +775,13 @@ class ModMidpointExtrapolationMass(ExtrapolationSolver):
             * (1.0 + self.implicit_rel_costs.rel_backsub_cost),
             dtype=self.dtype,
         )
-        self._init_controller(total_feval_cost_for_k)
+        self.step_controller.initialize_scheme(
+            is_symmetric=self.is_symmetric,
+            table_size=self.table_size,
+            substep_seq=self.substep_seq,
+            total_feval_cost_for_k=total_feval_cost_for_k,
+            local_order_func=self.get_local_order,
+        )
 
         self.lu_and_piv_mass = lu_factor(mass_matrix)
 
@@ -843,7 +873,9 @@ class ModMidpointExtrapolationRational(ModMidpointExtrapolation):
             dtype=dtype,
         )
         if use_smoothing:
-            assert self.substep_seq%2==0, "smoothing requires an even sub step sequence"
+            assert (
+                self.substep_seq % 2 == 0
+            ).all(), "smoothing requires an even sub step sequence"
 
         self.coeffs_extrap = np.array(
             [
@@ -915,7 +947,8 @@ class LimplicitEulerExtrapolation(ExtrapolationSolver):
         step_controller: StepControllerExtrap | None = None,
         substep_seq: (
             NDArray[np.integer]
-            | Literal                "harmonic",
+            | Literal[
+                "harmonic",
                 "harmonic_even",
                 "Romberg",
                 "Romberg_even",
@@ -924,7 +957,7 @@ class LimplicitEulerExtrapolation(ExtrapolationSolver):
                 "harmonic2",
                 "fours",
                 "SODEX",
-]
+            ]
         ) = "harmonic2",
         mass_matrix: NDArray[np.floating] | None = None,
         num_odes: int | None = None,
@@ -935,6 +968,7 @@ class LimplicitEulerExtrapolation(ExtrapolationSolver):
             ode_fun=ode_fun,
             substep_seq=substep_seq,
             is_symmetric=False,
+            local_order_func=lambda k: k + 1,
             table_size=table_size,
             step_controller=step_controller,
             dtype=dtype,
@@ -972,7 +1006,13 @@ class LimplicitEulerExtrapolation(ExtrapolationSolver):
             np.cumsum(feval_cost_per_k, dtype=self.dtype)
             + self.implicit_rel_costs.rel_jac_cost
         )
-        self._init_controller(total_feval_cost_for_k)
+        self.step_controller.initialize_scheme(
+            is_symmetric=self.is_symmetric,
+            table_size=self.table_size,
+            substep_seq=self.substep_seq,
+            total_feval_cost_for_k=total_feval_cost_for_k,
+            local_order_func=self.get_local_order,
+        )
 
     @override
     def base_scheme(
@@ -1070,6 +1110,8 @@ class LimplicitMidpointExtrapolation(ExtrapolationSolver):
             ode_fun=ode_fun,
             substep_seq=substep_seq,
             is_symmetric=True,
+            local_order_func=lambda k: 2 * k + 1,  # default choice, SIMP1
+            # local_order_func=lambda k: 2 * k + 2, # possibly more conservative choice, might benmore accurate for nonlinear + highly stiff problems, early? versions of METAN1
             table_size=table_size,
             step_controller=step_controller,
             dtype=dtype,
@@ -1085,7 +1127,9 @@ class LimplicitMidpointExtrapolation(ExtrapolationSolver):
             ), "either mass matrix or the number of ODEs has to be specified"
             num_odes = mass_matrix.shape[0]
         if use_smoothing:
-            assert self.substep_seq%2==0, "smoothing requires an even sub step sequence"
+            assert (
+                self.substep_seq % 2 == 0
+            ).all(), "smoothing requires an even sub step sequence"
         self._init_implicit(
             num_odes=num_odes,  # type: ignore
             require_jacobian=True,
@@ -1105,7 +1149,13 @@ class LimplicitMidpointExtrapolation(ExtrapolationSolver):
             np.cumsum(feval_cost_per_k, dtype=self.dtype)
             + self.implicit_rel_costs.rel_jac_cost
         )
-        self._init_controller(total_feval_cost_for_k)
+        self.step_controller.initialize_scheme(
+            is_symmetric=self.is_symmetric,
+            table_size=self.table_size,
+            substep_seq=self.substep_seq,
+            total_feval_cost_for_k=total_feval_cost_for_k,
+            local_order_func=self.get_local_order,
+        )
 
     @override
     def base_scheme(
