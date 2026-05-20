@@ -605,7 +605,7 @@ class StepControllerExtrapKH_Deuflhard(StepControllerExtrap):
         #     return float(np.finfo(error.dtype).max)
 
         err_ratio = (
-            self.norm(error / np.maximum(np.abs(x_curr), np.abs(x_pred)))
+            self.norm(error / (self.rtol * np.maximum(np.abs(x_curr), np.abs(x_pred))))
             / self.safety_tol
         )
         return err_ratio
@@ -620,14 +620,14 @@ class StepControllerExtrapKH_Deuflhard(StepControllerExtrap):
         if err_ratio_k == 0:
             s_opt = 100.0
         else:
-            s_opt = ((self.safety_tol * self.rtol) / err_ratio_k) ** order_exponent
+            s_opt = (self.safety_tol / err_ratio_k) ** order_exponent
         return s_opt
 
     def _get_diag_err_ratio_ideal_infth(self, k: int, q: int) -> np.floating:
         """get ideal step multipliers from information theory. Similar to _get_step_mult_opt called with alpha instead of the error, but without clipping"""
-        tol_exp = (
-            self.total_feval_cost_for_k[k] - self.total_feval_cost_for_k[0] + 1.0
-        ) / (self.total_feval_cost_for_k[q] - self.total_feval_cost_for_k[0] + 1.0)
+        tol_exp = (self.total_feval_cost_for_k[k] - self.total_feval_cost_for_k[q]) / (
+            self.total_feval_cost_for_k[q] - self.total_feval_cost_for_k[0] + 1.0
+        )
 
         err_id = self.norm(self.rtol**tol_exp)
         return err_id
@@ -684,7 +684,7 @@ class StepControllerExtrapKH_Deuflhard(StepControllerExtrap):
                     msg=f"Divergence in step {k_curr}, error ratio: {error_ratio}, previous error ratio: {self.error_ratios_k[k_curr - 1]}"
                 )
         elif k_curr >= k_target - self.pre_check_window or allow_early_check:
-            if error_ratio <= self.rtol:  # TODO: should be replaced by check below?
+            if error_ratio <= 1.0:  # TODO: should be replaced by check below?
                 state = "accepted"
             elif (
                 # TODO: does this not always trigger before true convergence?
@@ -777,7 +777,7 @@ class StepControllerExtrapKH_Deuflhard(StepControllerExtrap):
                     > self.err_ratio_id_inftheoretic[k_final, k_target_last + 1]
                 ):  # serious convergence failure, force step reduction
                     # TODO: i should probably still use ideal parameters
-                    k_target = k_target_last  # TODO: or k_final (this restrits order harshely)? or k_opt?
+                    k_target = k_target_last  # TODO: or k_final (this restricts order harshly, also )? or k_opt?
                     next_step_mult = (
                         self._get_step_mult_opt(
                             self.error_ratios_k[k_final - 1]
