@@ -1,4 +1,6 @@
 from abc import ABC, abstractmethod
+from functools import cache
+import functools
 from numpy._typing._array_like import NDArray
 from typing import (
     Any,
@@ -63,7 +65,6 @@ class ExtrapolationSolver(ABC):
             ]
         ),
         is_symmetric: bool,
-        local_order_func: Callable[[int], int],
         table_size: int,
         step_controller: StepControllerExtrap | None = None,
         dtype: DTypeLike = np.double,
@@ -123,7 +124,6 @@ class ExtrapolationSolver(ABC):
         self.substep_seq = substep_seq
         self.is_symmetric = is_symmetric
         self.order_exponent = 2 if is_symmetric else 1
-        self.get_local_order = local_order_func
         self.table_size: int = table_size
         self.dtype = dtype
 
@@ -465,6 +465,10 @@ class ExtrapolationSolver(ABC):
         return n_substeps
 
     @abstractmethod
+    def get_local_order(self, k: int) -> int:
+        raise NotImplementedError()
+
+    @abstractmethod
     def base_scheme(
         self,
         x0: NDArray[np.floating],
@@ -504,7 +508,6 @@ class EulerExtrapolation(ExtrapolationSolver):
             ode_fun=ode_fun,
             substep_seq=substep_seq,
             is_symmetric=False,
-            local_order_func=lambda k: k + 1,
             table_size=table_size,
             step_controller=step_controller,
             dtype=dtype,
@@ -517,6 +520,10 @@ class EulerExtrapolation(ExtrapolationSolver):
             total_feval_cost_for_k=total_feval_cost_for_k,
             local_order_func=self.get_local_order,
         )
+
+    @override
+    def get_local_order(self, k: int) -> int:
+        return k + 1
 
     @override
     def base_scheme(
@@ -570,7 +577,6 @@ class EulerExtrapolationMass(ExtrapolationSolver):
             ode_fun=ode_fun,
             substep_seq=substep_seq,
             is_symmetric=False,
-            local_order_func=lambda k: k + 1,
             table_size=table_size,
             step_controller=step_controller,
             dtype=dtype,
@@ -594,6 +600,10 @@ class EulerExtrapolationMass(ExtrapolationSolver):
         )
 
         self.lu_and_piv_mass = lu_factor(mass_matrix)
+
+    @override
+    def get_local_order(self, k: int) -> int:
+        return k + 1
 
     @override
     def base_scheme(
@@ -652,7 +662,6 @@ class ModMidpointExtrapolation(ExtrapolationSolver):
             ode_fun=ode_fun,
             substep_seq=substep_seq,
             is_symmetric=True,
-            local_order_func=lambda k: 2 * k + 2,
             table_size=table_size,
             step_controller=step_controller,
             dtype=dtype,
@@ -674,6 +683,10 @@ class ModMidpointExtrapolation(ExtrapolationSolver):
             total_feval_cost_for_k=total_feval_cost_for_k,
             local_order_func=self.get_local_order,
         )
+
+    @override
+    def get_local_order(self, k: int) -> int:
+        return 2 * k + 2
 
     @override
     def _fevals_per_base_solve(self, n_substeps: int) -> int:
@@ -752,17 +765,15 @@ class ModMidpointExtrapolationMass(ExtrapolationSolver):
             ode_fun=ode_fun,
             substep_seq=substep_seq,
             is_symmetric=True,
-            local_order_func=lambda k: 2 * k + 2,
             table_size=table_size,
             step_controller=step_controller,
             dtype=dtype,
         )
-        even_substep_seq = (self.substep_seq % 2 == 0).all()
-        if not even_substep_seq:
-            self.get_local_order: Callable[[int], int] = lambda k: 2 * k + 1
+        self.even_substep_seq = (self.substep_seq % 2 == 0).all()
+        if not self.even_substep_seq:
             logger.warning("Order reduction due to non-even step sequence")
         if use_smoothing:
-            assert even_substep_seq, "smoothing requires an even sub step sequence"
+            assert self.even_substep_seq, "smoothing requires an even sub step sequence"
         self.norm = self.step_controller.norm
         self._init_implicit(
             num_odes=mass_matrix.shape[0],
@@ -784,6 +795,13 @@ class ModMidpointExtrapolationMass(ExtrapolationSolver):
         )
 
         self.lu_and_piv_mass = lu_factor(mass_matrix)
+
+    @override
+    def get_local_order(self, k: int) -> int:
+        if self.even_substep_seq:
+            return 2 * k + 2
+        else:
+            return 2 * k + 1
 
     @override
     def _fevals_per_base_solve(self, n_substeps: int) -> int:
@@ -968,7 +986,6 @@ class LimplicitEulerExtrapolation(ExtrapolationSolver):
             ode_fun=ode_fun,
             substep_seq=substep_seq,
             is_symmetric=False,
-            local_order_func=lambda k: k + 1,
             table_size=table_size,
             step_controller=step_controller,
             dtype=dtype,
@@ -1013,6 +1030,10 @@ class LimplicitEulerExtrapolation(ExtrapolationSolver):
             total_feval_cost_for_k=total_feval_cost_for_k,
             local_order_func=self.get_local_order,
         )
+
+    @override
+    def get_local_order(self, k: int) -> int:
+        return k + 1
 
     @override
     def base_scheme(
@@ -1110,8 +1131,6 @@ class LimplicitMidpointExtrapolation(ExtrapolationSolver):
             ode_fun=ode_fun,
             substep_seq=substep_seq,
             is_symmetric=True,
-            local_order_func=lambda k: 2 * k + 1,  # default choice, SIMP1
-            # local_order_func=lambda k: 2 * k + 2, # possibly more conservative choice, might benmore accurate for nonlinear + highly stiff problems, early? versions of METAN1
             table_size=table_size,
             step_controller=step_controller,
             dtype=dtype,
@@ -1156,6 +1175,11 @@ class LimplicitMidpointExtrapolation(ExtrapolationSolver):
             total_feval_cost_for_k=total_feval_cost_for_k,
             local_order_func=self.get_local_order,
         )
+
+    @override
+    def get_local_order(self, k: int) -> int:
+        return 2 * k + 1  # default choice, SIMP1
+        # return 2 * k + 2 # possibly more conservative choice, might benmore accurate for nonlinear + highly stiff problems, early? versions of METAN1
 
     @override
     def base_scheme(
