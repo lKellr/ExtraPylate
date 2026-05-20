@@ -1,7 +1,11 @@
+import logging
+
 from typing import Any, Callable
 import numpy as np
 from numpy.typing import NDArray
 from scipy.special import comb
+
+logger = logging.getLogger(__name__)
 
 
 def Euler(
@@ -14,7 +18,9 @@ def Euler(
     """Eulers method for numerical solving of ODEs"""
     steps = np.ceil((t_max - t0) / h).astype(int)
     if t0 + steps * h != t_max:
-        print(f"final step not hitting t_max exactly, instead t_max = {steps * h}")
+        logger.warning(
+            f"final step not hitting t_max exactly, instead t_max = {steps * h}"
+        )
 
     info: dict[str, Any] = dict(
         n_feval=0,
@@ -43,7 +49,9 @@ def Midpoint(
     """Explicit Midpoint method for numerical solving of ODEs of the form x_dot=ode_fun(t,x)"""
     steps = np.ceil((t_max - t0) / h).astype(int)
     if steps * h / (t_max - t0) - 1.0 > 1e-4:
-        print(f"final step not hitting t_max exactly, instead t_max = {steps * h}")
+        logger.warning(
+            f"final step not hitting t_max exactly, instead t_max = {steps * h}"
+        )
 
     info: dict[str, Any] = dict(
         n_feval=0,
@@ -76,7 +84,9 @@ def Heun(
     """Heuns method for numerical solving of ODEs of the form x_dot=ode_fun(t,x). THius is equal to SSPRK2"""
     steps = np.ceil((t_max - t0) / h).astype(int)
     if steps * h / (t_max - t0) - 1.0 > 1e-4:
-        print(f"final step not hitting t_max exactly, instead t_max = {steps * h}")
+        logger.warning(
+            f"final step not hitting t_max exactly, instead t_max = {steps * h}"
+        )
 
     info: dict[str, Any] = dict(
         n_feval=0,
@@ -107,7 +117,9 @@ def AB2(
     """Adams Bashforth of order 2, started by Midpoint method"""
     steps = np.ceil((t_max - t0) / h).astype(int)
     if steps * h / (t_max - t0) - 1.0 > 1e-4:
-        print(f"final step not hitting t_max exactly, instead t_max = {steps * h}")
+        logger.warning(
+            f"final step not hitting t_max exactly, instead t_max = {steps * h}"
+        )
 
     info: dict[str, Any] = dict(
         n_feval=0,
@@ -143,7 +155,9 @@ def AB3(
     """Adams Bashforth of order 3, first values calculated with Midpoint and AB2"""
     steps = np.ceil((t_max - t0) / h).astype(int)
     if steps * h / (t_max - t0) - 1.0 > 1e-4:
-        print(f"final step not hitting t_max exactly, instead t_max = {steps * h}")
+        logger.warning(
+            f"final step not hitting t_max exactly, instead t_max = {steps * h}"
+        )
 
     info: dict[str, Any] = dict(
         n_feval=0,
@@ -183,7 +197,9 @@ def PECE(
     """PECE Method using AB3, AM4, starting with Midpoint and AB2"""
     steps = np.ceil((t_max - t0) / h).astype(int)
     if steps * h / (t_max - t0) - 1.0 > 1e-4:
-        print(f"final step not hitting t_max exactly, instead t_max = {steps * h}")
+        logger.warning(
+            f"final step not hitting t_max exactly, instead t_max = {steps * h}"
+        )
 
     info: dict[str, Any] = dict(
         n_feval=0,
@@ -229,7 +245,9 @@ def PECE_tol(
     """PECE Method using AB3, AM4, starting with Midpoint and AB2, iterates until convergence with tolerance tol is met"""
     steps = np.ceil((t_max - t0) / h).astype(int)
     if steps * h / (t_max - t0) - 1.0 > 1e-4:
-        print(f"final step not hitting t_max exactly, instead t_max = {steps * h}")
+        logger.warning(
+            f"final step not hitting t_max exactly, instead t_max = {steps * h}"
+        )
 
     info: dict[str, Any] = dict(
         n_feval=0,
@@ -280,7 +298,9 @@ def PEC(
     """PEC Method using AB3, AM4, starting with Midpoint and AB2"""
     steps = np.ceil((t_max - t0) / h).astype(int)
     if steps * h / (t_max - t0) - 1.0 > 1e-4:
-        print(f"final step not hitting t_max exactly, instead t_max = {steps * h}")
+        logger.warning(
+            f"final step not hitting t_max exactly, instead t_max = {steps * h}"
+        )
 
     info: dict[str, Any] = dict(
         n_feval=0,
@@ -328,7 +348,14 @@ def AB_k(
 
     steps = np.ceil((t_max - t0) / h).astype(int)
     if steps * h / (t_max - t0) - 1.0 > 1e-4:
-        print(f"final step not hitting t_max exactly, instead t_max = {steps * h}")
+        logger.warning(
+            f"final step not hitting t_max exactly, instead t_max = {steps * h}"
+        )
+    if steps + 1 < k:
+        logger.warning(
+            f"Number of steps {steps} not sufficient to reach target order {k}"
+        )
+        k = steps
 
     t = np.linspace(t0, steps * h, steps + 1, dtype=x0.dtype)
     x, info, f_values = _AB_k(ode_fun=ode_fun, x0=x0, steps=steps, h=h, k=k, t0=t0)
@@ -401,7 +428,9 @@ def RK4(
     """Classical Runge-Kutta Method, order 4"""
     steps = np.ceil((t_max - t0) / h).astype(int)
     if steps * h / (t_max - t0) - 1.0 > 1e-4:
-        print(f"final step not hitting t_max exactly, instead t_max = {steps * h}")
+        logger.warning(
+            f"final step not hitting t_max exactly, instead t_max = {steps * h}"
+        )
 
     info: dict[str, Any] = dict(
         n_feval=0,
@@ -435,7 +464,9 @@ def SSPRK3(
     """Strong stability preserving RK method of order 3, cfl_max <=1"""
     steps = np.ceil((t_max - t0) / h).astype(int)
     if steps * h / (t_max - t0) - 1.0 > 1e-4:
-        print(f"final step not hitting t_max exactly, instead t_max = {steps * h}")
+        logger.warning(
+            f"final step not hitting t_max exactly, instead t_max = {steps * h}"
+        )
 
     info: dict[str, Any] = dict(
         n_feval=0,
@@ -467,7 +498,9 @@ def SSPRK34(
     """Four stage strong stability preserving RK method of order 3, cfl_max <=2"""
     steps = np.ceil((t_max - t0) / h).astype(int)
     if steps * h / (t_max - t0) - 1.0 > 1e-4:
-        print(f"final step not hitting t_max exactly, instead t_max = {steps * h}")
+        logger.warning(
+            f"final step not hitting t_max exactly, instead t_max = {steps * h}"
+        )
 
     info: dict[str, Any] = dict(
         n_feval=0,

@@ -1,3 +1,5 @@
+import logging
+
 from typing import Callable, Any
 import numpy as np
 from numpy.typing import NDArray
@@ -7,6 +9,8 @@ from modules.helpers import (
     numerical_jacobian_t,
 )
 from modules.root_finding import NewtonODE
+
+logger = logging.getLogger(__name__)
 
 
 def Backwards_Euler(
@@ -30,7 +34,9 @@ def Backwards_Euler(
     """Backwards Euler Method. System of Equations solved by solver(ode_fun==0, a, b, tol_iter)"""
     steps = np.ceil((t_max - t0) / h).astype(int)
     if t0 + steps * h != t_max:
-        print(f"final step not hitting t_max exactly, instead t_max = {steps * h}")
+        logger.warning(
+            f"final step not hitting t_max exactly, instead t_max = {steps * h}"
+        )
 
     info: dict[str, Any] = dict(
         n_feval=0,
@@ -48,6 +54,7 @@ def Backwards_Euler(
 
         def f_imp(x_next):
             return x_next - x[i] - h * ode_fun(t[i + 1], x_next)
+
         x[i + 1], success, sol_info = nl_solver(
             f_imp,
             x0=x[i],
@@ -57,7 +64,9 @@ def Backwards_Euler(
             eta_old=sol_info["eta"],
         )
         if not success:
-            print(f"solver did not converge, reason: {sol_info['stop_reason']}")
+            logger.warning(
+                f"solver did not converge, reason: {sol_info['stop_reason']}"
+            )
             break
         info["n_feval"] += sol_info["n_feval"]
         info["n_jaceval"] += sol_info["n_jaceval"]
@@ -88,7 +97,14 @@ def AM_k(
     """Adams-Moulton formula of variable order k, maximum implemented is 9"""
     steps = np.ceil((t_max - t0) / h).astype(int)
     if steps * h / (t_max - t0) - 1.0 > 1e-4:
-        print(f"final step not hitting t_max exactly, instead t_max = {steps * h}")
+        logger.warning(
+            f"final step not hitting t_max exactly, instead t_max = {steps * h}"
+        )
+    if steps + 2 < k:
+        logger.warning(
+            f"Number of steps {steps} not sufficient to reach target order {k}"
+        )
+        k = steps
 
     t = np.linspace(t0, steps * h, steps + 1, dtype=x0.dtype)
     x, info, f_values = _AM_k(ode_fun=ode_fun, x0=x0, steps=steps, h=h, k=k, t0=t0)
@@ -187,7 +203,7 @@ def _AM_k(
         )
 
         if not success:
-            print("solver did not converge")
+            logger.warning("solver did not converge")
             break
         info["n_feval"] += sol_info["n_feval"]
         info["n_jaceval"] += sol_info["n_jaceval"]
@@ -218,7 +234,9 @@ def BDF2(
     System of Equations solved by solver(ode_fun==0, a, b, tol_iter)"""
     steps = np.ceil((t_max - t0) / h).astype(int)
     if t0 + steps * h != t_max:
-        print(f"final step not hitting t_max exactly, instead t_max = {steps * h}")
+        logger.warning(
+            f"final step not hitting t_max exactly, instead t_max = {steps * h}"
+        )
 
     info: dict[str, Any] = dict(
         n_feval=0,
@@ -249,6 +267,7 @@ def BDF2(
                 + 1 / 3 * x[i - 1]
                 - 2 / 3 * h * ode_fun(t[i + 1], x_next)
             )
+
         x[i + 1], success, sol_info = nl_solver(
             f_imp,
             x0=x[i],
@@ -258,7 +277,7 @@ def BDF2(
             eta_old=sol_info["eta"],
         )
         if not success:
-            print("solver did not converge")
+            logger.warning("solver did not converge")
             break
         info["n_feval"] += sol_info["n_feval"]
         info["n_jaceval"] += sol_info["n_jaceval"]
@@ -288,7 +307,9 @@ def TRBDF2(
     see "Analysis and implementation of TR-BDF2", Hosea and Shampine 1996"""
     steps = np.ceil((t_max - t0) / h).astype(int)
     if t0 + steps * h != t_max:
-        print(f"final step not hitting t_max exactly, instead t_max = {steps * h}")
+        logger.warning(
+            f"final step not hitting t_max exactly, instead t_max = {steps * h}"
+        )
 
     info: dict[str, Any] = dict(
         n_feval=0,
@@ -312,6 +333,7 @@ def TRBDF2(
                 * h
                 * (ode_fun(t[i], x[i]) + ode_fun(t[i] + 0.5 * h, x_halftrapz))
             )
+
         x_halftrapz, success, sol1_info = nl_solver(
             f_imp1,
             x0=x[i],
@@ -321,7 +343,7 @@ def TRBDF2(
             eta_old=sol1_info["eta"],
         )
         if not success:
-            print("solver did not converge")
+            logger.warning("solver did not converge")
             break
         info["n_feval"] += sol1_info["n_feval"]
         info["n_jaceval"] += sol1_info["n_jaceval"]
@@ -341,6 +363,7 @@ def TRBDF2(
                     )  # Note that the step is here half of what it is in the normal BDF2 scheme!
                 )
             )
+
         x[i + 1], success, sol2_info = nl_solver(
             f_imp2,
             x0=x_halftrapz,
@@ -350,7 +373,7 @@ def TRBDF2(
             eta_old=sol2_info["eta"],
         )
         if not success:
-            print("solver did not converge")
+            logger.warning("solver did not converge")
             break
         info["n_feval"] += sol2_info["n_feval"]
         info["n_jaceval"] += sol2_info["n_jaceval"]
@@ -381,7 +404,9 @@ def BDF3(
     System of Equations solved by solver(ode_fun==0, a, b, tol_iter)"""
     steps = np.ceil((t_max - t0) / h).astype(int)
     if t0 + steps * h != t_max:
-        print(f"final step not hitting t_max exactly, instead t_max = {steps * h}")
+        logger.warning(
+            f"final step not hitting t_max exactly, instead t_max = {steps * h}"
+        )
 
     info: dict[str, Any] = dict(
         n_feval=0,
@@ -414,6 +439,7 @@ def BDF3(
                 - 2 * x[i - 2]
                 - 6 * h * ode_fun(t[i + 1], x_next)
             )
+
         x[i + 1], success, sol_info = nl_solver(
             f_imp,
             x0=x[i],
@@ -424,10 +450,9 @@ def BDF3(
         )
 
         if not success:
-            print("solver did not converge")
+            logger.warning("solver did not converge")
             break
         info["n_feval"] += sol_info["n_feval"]
         info["n_jaceval"] += sol_info["n_jaceval"]
         info["n_lu"] += sol_info["n_lu"]
     return t, x, info
-
