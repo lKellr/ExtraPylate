@@ -18,3 +18,5 @@ authors = [{ name = "L. Kellerer", email = "l.kellerer1@gmx.de" }]
 
 dependencies = ["numpy", "scipy", "matplotlib"]
 
+[tool.ruff]
+target-version = "py310"
