@@ -302,7 +302,6 @@ def PEC(
     f_ii = ode_fun(t[1], x[1])
     f_iii = ode_fun(t[0], x[0])
     for i in range(2, steps):
-
         x[i + 1] = x[i] + h / 12 * (
             23 * f_i - 16 * f_ii + 5 * f_iii
         )  # AB3 predict/evaluate

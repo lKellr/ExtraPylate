@@ -59,7 +59,7 @@ def Backwards_Euler(
             eta_old=sol_info["eta"] if i > 1 else np.inf,
         )
         if not success:
-            print(f"solver did not converge, reason: {sol_info["stop_reason"]}")
+            print(f"solver did not converge, reason: {sol_info['stop_reason']}")
             break
         info["n_feval"] += sol_info["n_feval"]
         info["n_jaceval"] += sol_info["n_jaceval"]
@@ -172,9 +172,12 @@ def _AM_k(
         if (
             jac_fun is None
         ):  # Jacobian without setting f_i[0] # TODO: this is probably not efficient
-            jac_fun = lambda x_next: np.eye(x_next.shape[0]) - h * beta[
-                0
-            ] * numerical_jacobian_t(t0 + (i + 1) * h, x_next, ode_fun, 1e-8)
+            jac_fun = lambda x_next: (
+                np.eye(x_next.shape[0])
+                - h
+                * beta[0]
+                * numerical_jacobian_t(t0 + (i + 1) * h, x_next, ode_fun, 1e-8)
+            )
 
         x[i + 1], success, sol_info = nl_solver(
             f_imp,
@@ -240,8 +243,8 @@ def BDF2(
     info = inf_starter
 
     for i in range(1, steps):
-        f_imp = (
-            lambda x_next: x_next
+        f_imp = lambda x_next: (
+            x_next
             - 4 / 3 * x[i]
             + 1 / 3 * x[i - 1]
             - 2 / 3 * h * ode_fun(t[i + 1], x_next)
@@ -299,9 +302,14 @@ def TRBDF2(
 
     x[0] = x0
     for i in range(steps):
-        f_imp1 = lambda x_halftrapz: x_halftrapz - (
-            x[i]
-            + 0.25 * h * (ode_fun(t[i], x[i]) + ode_fun(t[i] + 0.5 * h, x_halftrapz))
+        f_imp1 = lambda x_halftrapz: (
+            x_halftrapz
+            - (
+                x[i]
+                + 0.25
+                * h
+                * (ode_fun(t[i], x[i]) + ode_fun(t[i] + 0.5 * h, x_halftrapz))
+            )
         )
         x_halftrapz, success, sol1_info = nl_solver(
             f_imp1,
@@ -318,13 +326,20 @@ def TRBDF2(
         info["n_jaceval"] += sol1_info["n_jaceval"]
         info["n_lu"] += sol1_info["n_lu"]
 
-        f_imp2 = lambda x_next: x_next - 1.0 / 3.0 * (
-            4 * x_halftrapz
-            - x[i]
-            + h
-            * ode_fun(
-                t[i + 1], x_next
-            )  # Note that the step is here half of what it is in the normal BDF2 scheme!
+        f_imp2 = (
+            lambda x_next: (
+                x_next
+                - 1.0
+                / 3.0
+                * (
+                    4 * x_halftrapz
+                    - x[i]
+                    + h
+                    * ode_fun(
+                        t[i + 1], x_next
+                    )  # Note that the step is here half of what it is in the normal BDF2 scheme!
+                )
+            )
         )
         x[i + 1], success, sol2_info = nl_solver(
             f_imp2,
@@ -390,8 +405,8 @@ def BDF3(
     info = inf_starter
 
     for i in range(2, steps):
-        f_imp = (
-            lambda x_next: 11 * x_next
+        f_imp = lambda x_next: (
+            11 * x_next
             - 18 * x[i]
             + 9 * x[i - 1]
             - 2 * x[i - 2]

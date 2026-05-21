@@ -1,9 +1,11 @@
+import logging
 from abc import ABC, abstractmethod
 from typing import Callable, Literal, NamedTuple, override
+
 import numpy as np
 from numpy.typing import DTypeLike, NDArray
-from modules.helpers import norm_hairer, clip
-import logging
+
+from modules.helpers import clip, norm_hairer
 
 logger = logging.getLogger(__name__)
 
@@ -224,7 +226,6 @@ class StepControllerPI(StepController):
 
 
 class StepControllerExtrap(StepController, ABC):
-
     def __init__(
         self,
         pre_check_window: int,
@@ -380,9 +381,9 @@ class StepControllerExtrapKH_HW(StepControllerExtrap):
             dtype,
         )
 
-        assert (
-            1.0 / work_order_limits[1] > work_order_limits[0]
-        ), f"Invalid work order limits {work_order_limits}!"
+        assert 1.0 / work_order_limits[1] > work_order_limits[0], (
+            f"Invalid work order limits {work_order_limits}!"
+        )
         self.work_order_limits = work_order_limits
 
     def initialize_scheme(
@@ -428,9 +429,7 @@ class StepControllerExtrapKH_HW(StepControllerExtrap):
         state: contr_ext_state_type = "continue"
 
         error_ratio: float = self.get_error_ratio(error, x_curr, x_pred)
-        self.error_ratios_k[k_curr - 1] = (
-            error_ratio
-        )
+        self.error_ratios_k[k_curr - 1] = error_ratio
 
         if (
             k_curr >= 2 and error_ratio >= self.error_ratios_k[k_curr - 2]
@@ -443,8 +442,8 @@ class StepControllerExtrapKH_HW(StepControllerExtrap):
         elif k_curr >= k_target - self.pre_check_window or allow_early_check:
             if error_ratio <= 1.0:  # Convergence in line k_target − 1; or  k_target
                 state = "accepted"
-            elif error_ratio < np.prod(
-                self.err_reduction_at_step[k_curr : k_target + 1]
+            elif (
+                error_ratio < np.prod(self.err_reduction_at_step[k_curr : k_target + 1])
             ):  # Convergence monitor: can we expect convergence in until k_target + reduction_window?
                 state = "continue"
             else:
@@ -462,17 +461,17 @@ class StepControllerExtrapKH_HW(StepControllerExtrap):
         k_target: int,
         allow_order_increase: bool,
     ) -> tuple[int, float]:
-        assert (
-            k_final >= 1 and k_final <= self.table_size - 1
-        ), f"k_final = {k_final} outside of bounds"
+        assert k_final >= 1 and k_final <= self.table_size - 1, (
+            f"k_final = {k_final} outside of bounds"
+        )
 
         next_ktarget = -1
         next_step_mult = -1.0
 
         if k_final < self.k_min:
-            assert (
-                k_final == self.k_min - 1
-            ), "Step exited long before k_min. Estimation of next step parameters is not possible."
+            assert k_final == self.k_min - 1, (
+                "Step exited long before k_min. Estimation of next step parameters is not possible."
+            )
             next_ktarget = self.k_min
             next_step_mult = (
                 self._get_step_mult_opt(
@@ -499,21 +498,27 @@ class StepControllerExtrapKH_HW(StepControllerExtrap):
                 work_decreased < self.work_order_limits[0] * work_same
                 and k_final - 1 >= self.k_min
             ):  # NOTE: this possible double decrease in k-1 appears in Numerical Recipes but not in Hairer&Wanner
-                next_ktarget = k_final - 1 # order decrease/target double decrease (start of window)
+                next_ktarget = (
+                    k_final - 1
+                )  # order decrease/target double decrease (start of window)
                 next_step_mult = s_decreased
             elif (
                 work_same < self.work_order_limits[1] * work_decreased
                 and allow_order_increase
                 and k_final + 1 <= self.k_max
             ):  # NOTE: this work check is "out of phase" with the increase, since the work for order increase is unknown. We have assumed work_increased = work_check to find s_increased, so work_increased can not be computed from s_increased to perform the check
-                next_ktarget = k_final + 1  # order increase / target constant (start of window)
+                next_ktarget = (
+                    k_final + 1
+                )  # order increase / target constant (start of window)
                 next_step_mult = (
                     s_same
                     * self.total_feval_cost_for_k[k_final + 1]
                     / self.total_feval_cost_for_k[k_final]
                 )
             else:
-                next_ktarget = k_final  # order constant / target decrease (start of window)
+                next_ktarget = (
+                    k_final  # order constant / target decrease (start of window)
+                )
                 next_step_mult = s_same
 
         else:  # different variant at edge of check window to allow for reduction down by two
@@ -529,7 +534,7 @@ class StepControllerExtrapKH_HW(StepControllerExtrap):
             work_target = self.total_feval_cost_for_k[k_final - 2] / s_target
             work_last = self.total_feval_cost_for_k[k_final] / s_last
 
-            next_ktarget = k_final-1
+            next_ktarget = k_final - 1
             next_step_mult = s_target
             work_temp_faster = work_target
             if (
@@ -590,9 +595,9 @@ class StepControllerExtrapKH_Deuflhard(StepControllerExtrapKH_HW):
         k_target: int,
         allow_order_increase: bool,
     ) -> tuple[int, float]:
-        assert (
-            k_final >= 1 and k_final <= self.table_size - 1
-        ), f"k_final = {k_final} outside of bounds"
+        assert k_final >= 1 and k_final <= self.table_size - 1, (
+            f"k_final = {k_final} outside of bounds"
+        )
 
         allow_order_increase &= k_final + 1 <= self.k_max
 
@@ -601,9 +606,9 @@ class StepControllerExtrapKH_Deuflhard(StepControllerExtrapKH_HW):
         k_opt = -1
 
         if k_final < self.k_min:
-            assert (
-                k_final == self.k_min - 1
-            ), "Step exited long before k_min. Estimation of next step parameters is not possible."
+            assert k_final == self.k_min - 1, (
+                "Step exited long before k_min. Estimation of next step parameters is not possible."
+            )
             k_opt = self.k_min
             s_opt = (
                 self._get_step_mult_opt(
@@ -787,14 +792,14 @@ class StepControllerExtrapH(StepControllerExtrap):
                     msg=f"Divergence in step {k_curr}, error ratio: {error_ratio}, previous error ratio: {self.error_ratio}"
                 )
         elif k_curr >= k_target - self.pre_check_window or allow_early_check:
-            if k_curr >= k_target and error_ratio <= 1.0:  # Convergence only allowed when target order has been reached
+            if (
+                k_curr >= k_target and error_ratio <= 1.0
+            ):  # Convergence only allowed when target order has been reached
                 state = "accepted"
-            elif error_ratio < np.prod(
-                self.err_reduction_at_step[k_curr : k_target]
-            ):
+            elif error_ratio < np.prod(self.err_reduction_at_step[k_curr:k_target]):
                 state = "continue"
             else:
-                state = "too_slow_convergence" # when pre_check_window has been set different from zero, this can trigger an early step restart if we can't expect convergence 
+                state = "too_slow_convergence"  # when pre_check_window has been set different from zero, this can trigger an early step restart if we can't expect convergence
             if logger.isEnabledFor(logging.DEBUG):
                 logger.debug(
                     msg=f"Evaluated stage {k_curr}, error ratio: {error_ratio}, {state}"
@@ -896,7 +901,7 @@ class StepControllerExtrapK(StepControllerExtrap):
             if error_ratio <= 1.0:
                 state = "accepted"
             elif error_ratio > np.prod(
-                self.err_reduction_at_step[k_curr : ]
+                self.err_reduction_at_step[k_curr:]
             ):  # Convergence monitor: can we expect convergence in later steps?
                 if k_curr < self.table_size - 1:
                     state = "continue"
@@ -923,7 +928,7 @@ class StepControllerExtrapK(StepControllerExtrap):
         allow_order_increase: bool,
     ) -> tuple[int, float]:
         next_step_mult = 1.0
-        next_ktarget = self.table_size-1
+        next_ktarget = self.table_size - 1
 
         return next_ktarget, next_step_mult
 
@@ -1003,9 +1008,9 @@ class StepControllerExtrapDummy(StepControllerExtrap):
         k_target: int,
         allow_order_increase: bool,
     ) -> tuple[int, float]:
-        assert (
-            k_final == k_target
-        ), f"Step was finished with k_final = {k_final} not equal to k_tagret = {k_target}. This should not occur with this controller."
+        assert k_final == k_target, (
+            f"Step was finished with k_final = {k_final} not equal to k_tagret = {k_target}. This should not occur with this controller."
+        )
 
         return k_target, 1.0
 
@@ -1105,8 +1110,8 @@ class StepControllerExtrapBulirsch(StepControllerExtrap):
         if k_final < k_target:
             next_step_mult = 1.5
         else:
-            next_step_mult = self.safety_unscaled * 0.75 ** (
-                k_final - k_target
+            next_step_mult = (
+                self.safety_unscaled * 0.75 ** (k_final - k_target)
             )  # NOTE:GBS method uses 0.6 for Bulirsch sequence, but 0.7 might be better and 0.7-0.8 is probably better for all step sequences but Romberg
             # next_step_mult = (
             #     np.prod(step_seq[: k_final - k_target])

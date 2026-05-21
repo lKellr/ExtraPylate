@@ -1,7 +1,5 @@
+import logging
 from abc import ABC, abstractmethod
-from functools import cache
-import functools
-from numpy._typing._array_like import NDArray
 from typing import (
     Any,
     Callable,
@@ -9,14 +7,12 @@ from typing import (
     NamedTuple,
     override,
 )
+
 import numpy as np
 from numpy.typing import DTypeLike, NDArray
-import logging
-
 from scipy.linalg import lu_factor, lu_solve
 
 from modules.helpers import numerical_jacobian_t
-
 from modules.step_control import (
     StepControllerExtrap,
     StepControllerExtrapKH_HW,
@@ -72,9 +68,9 @@ class ExtrapolationSolver(ABC):
         if hasattr(substep_seq, "__len__") and all(
             isinstance(item, int) for item in substep_seq
         ):
-            assert (
-                len(substep_seq) >= table_size
-            ), f"substep_sequence must contain at least as many entries as the table size k={table_size}, current size: {len(substep_seq)}"
+            assert len(substep_seq) >= table_size, (
+                f"substep_sequence must contain at least as many entries as the table size k={table_size}, current size: {len(substep_seq)}"
+            )
             substep_seq = np.array(substep_seq, dtype=int)
         elif substep_seq == "harmonic":
             substep_seq = np.array(range(1, table_size + 1), dtype=int)
@@ -130,7 +126,7 @@ class ExtrapolationSolver(ABC):
         if is_symmetric:
             assert all(
                 [
-                    local_order_func(k + 1) - local_order_func(k) == 2
+                    self.get_local_order(k + 1) - self.get_local_order(k) == 2
                     for k in range(self.table_size)
                 ]
             ), "Symmetric schemes should have local orders proportional to 2k."
@@ -258,9 +254,7 @@ class ExtrapolationSolver(ABC):
         )
         # calculate initial jacobian, will be reused at the start of each extrapolation step
         jac0 = None
-        if (
-            self.impl_base_scheme
-        ):  # TODO: recompute only if theta is above some tolerance, reuse if it is a retry!
+        if self.impl_base_scheme:  # TODO: recompute only if theta is above some tolerance, reuse if it is a retry!
             jac0 = self.jac_fun(t_curr, x_curr)
 
         # this is allocated with max size, alternative would be to extend the size each loop iteration, not sure if this would be smart in terms of repeated allocation performance cost
@@ -285,9 +279,7 @@ class ExtrapolationSolver(ABC):
                 n_steps=self.substep_seq[k_curr],
                 jac0=jac0,
             )
-            if (
-                is_diverging
-            ):  # early exit: we don't have to calculate the next result and check the error if we are already diverging
+            if is_diverging:  # early exit: we don't have to calculate the next result and check the error if we are already diverging
                 if logger.isEnabledFor(logging.DEBUG):
                     logger.debug(
                         f"Early exit in stage {k_curr} due to divergence in the solver"
@@ -380,7 +372,7 @@ class ExtrapolationSolver(ABC):
         if log_period is None:
             log_period = step / (t_max - t0) * 50
 
-        logger.info(f"Beginning solve.")
+        logger.info("Beginning solve.")
 
         time = [t0]
         solution = [x0.astype(self.dtype)]
@@ -500,7 +492,7 @@ class EulerExtrapolation(ExtrapolationSolver):
                 "harmonic2",
                 "fours",
                 "SODEX",
-]
+            ]
         ) = "harmonic",
         dtype: DTypeLike = np.double,
     ):
@@ -568,7 +560,7 @@ class EulerExtrapolationMass(ExtrapolationSolver):
                 "harmonic2",
                 "fours",
                 "SODEX",
-]
+            ]
         ) = "harmonic",
         implicit_rel_costs: ImplicitRelCosts | None = None,
         dtype: DTypeLike = np.double,
@@ -652,7 +644,7 @@ class ModMidpointExtrapolation(ExtrapolationSolver):
                 "harmonic2",
                 "fours",
                 "SODEX",
-]
+            ]
         ) = "harmonic_even",
         dtype: DTypeLike = np.double,
     ):
@@ -666,12 +658,11 @@ class ModMidpointExtrapolation(ExtrapolationSolver):
             step_controller=step_controller,
             dtype=dtype,
         )
-        even_substep_seq = (self.substep_seq % 2 == 0).all()
-        if not even_substep_seq:
-            self.get_local_order: Callable[[int], int] = lambda k: 2 * k + 1
+        self.even_substep_seq = (self.substep_seq % 2 == 0).all()
+        if not self.even_substep_seq:
             logger.warning("Order reduction due to non-even step sequence")
         if use_smoothing:
-            assert even_substep_seq, "smoothing requires an even sub step sequence"
+            assert self.even_substep_seq, "smoothing requires an even sub step sequence"
         self.norm = self.step_controller.norm
         total_feval_cost_for_k = np.cumsum(
             (self.substep_seq + self.use_smoothing) * 1.0, dtype=self.dtype
@@ -686,7 +677,10 @@ class ModMidpointExtrapolation(ExtrapolationSolver):
 
     @override
     def get_local_order(self, k: int) -> int:
-        return 2 * k + 2
+        if self.even_substep_seq:
+            return 2 * k + 2
+        else:
+            return 2 * k + 1
 
     @override
     def _fevals_per_base_solve(self, n_substeps: int) -> int:
@@ -754,7 +748,7 @@ class ModMidpointExtrapolationMass(ExtrapolationSolver):
                 "harmonic2",
                 "fours",
                 "SODEX",
-]
+            ]
         ) = "harmonic_even",
         implicit_rel_costs: ImplicitRelCosts | None = None,
         dtype: DTypeLike = np.double,
@@ -877,7 +871,7 @@ class ModMidpointExtrapolationRational(ModMidpointExtrapolation):
                 "Bulirsch_even",
                 "fours",
                 "SODEX",
-]
+            ]
         ) = "Bulirsch_even",
         dtype: DTypeLike = np.double,
     ):
@@ -891,9 +885,9 @@ class ModMidpointExtrapolationRational(ModMidpointExtrapolation):
             dtype=dtype,
         )
         if use_smoothing:
-            assert (
-                self.substep_seq % 2 == 0
-            ).all(), "smoothing requires an even sub step sequence"
+            assert (self.substep_seq % 2 == 0).all(), (
+                "smoothing requires an even sub step sequence"
+            )
 
         self.coeffs_extrap = np.array(
             [
@@ -997,9 +991,9 @@ class LimplicitEulerExtrapolation(ExtrapolationSolver):
         self.rtol_newton = self.step_controller.rtol
 
         if num_odes is None:
-            assert (
-                mass_matrix is not None
-            ), "either mass matrix or the number of ODEs has to be specified"
+            assert mass_matrix is not None, (
+                "either mass matrix or the number of ODEs has to be specified"
+            )
             num_odes = mass_matrix.shape[0]
 
         self._init_implicit(
@@ -1077,12 +1071,15 @@ class LimplicitEulerExtrapolation(ExtrapolationSolver):
                     overwrite_b=True,
                     check_finite=False,
                 )
-                conv_rate = self.norm(delta_x_1 / tol) / max(
-                    self.norm(
-                        delta_x_0  # pyright: ignore[reportPossiblyUnboundVariable]
-                        / tol
-                    ),
-                    1.0,  # maximum prevents divergence detection if iteration error is already elow tolerance
+                conv_rate = (
+                    self.norm(delta_x_1 / tol)
+                    / max(
+                        self.norm(
+                            delta_x_0  # pyright: ignore[reportPossiblyUnboundVariable]
+                            / tol
+                        ),
+                        1.0,  # maximum prevents divergence detection if iteration error is already elow tolerance
+                    )
                 )
                 if conv_rate > 1.0:
                     return ddelta_x, True
@@ -1141,14 +1138,14 @@ class LimplicitMidpointExtrapolation(ExtrapolationSolver):
         self.rtol_newton = self.step_controller.rtol
 
         if num_odes is None:
-            assert (
-                mass_matrix is not None
-            ), "either mass matrix or the number of ODEs has to be specified"
+            assert mass_matrix is not None, (
+                "either mass matrix or the number of ODEs has to be specified"
+            )
             num_odes = mass_matrix.shape[0]
         if use_smoothing:
-            assert (
-                self.substep_seq % 2 == 0
-            ).all(), "smoothing requires an even sub step sequence"
+            assert (self.substep_seq % 2 == 0).all(), (
+                "smoothing requires an even sub step sequence"
+            )
         self._init_implicit(
             num_odes=num_odes,  # type: ignore
             require_jacobian=True,
@@ -1232,9 +1229,7 @@ class LimplicitMidpointExtrapolation(ExtrapolationSolver):
                 if conv_rate > 1.0:
                     return ddelta_x_n, True
 
-        if (
-            self.use_smoothing
-        ):  # Gragg's smoothing, requires one additional step before which we save the previous value of x
+        if self.use_smoothing:  # Gragg's smoothing, requires one additional step before which we save the previous value of x
             rhs = 2 * (
                 delta_t * self.ode_fun(t_n, x0 + ddelta_x_n)
                 - self.mass_matrix @ delta_x

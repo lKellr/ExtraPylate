@@ -89,7 +89,7 @@ def Newton(
         if conv_rate >= 1:
             success = False
             logger.warning(
-                f"Divergence of Newton in iteration {iter+1}, conv_rate = {conv_rate}"
+                f"Divergence of Newton in iteration {iter + 1}, conv_rate = {conv_rate}"
             )
             info["stop_reason"] = "slow convergence"
             break
@@ -99,14 +99,14 @@ def Newton(
             info["stop_reason"] = "max steps reached"
             break
         if (
-            iter + 1
-        ) % jac_freq == 0 or conv_rate >= 0.5:  # TODO: is the second criterion a good idea? which value should i choose?
+            (iter + 1) % jac_freq == 0 or conv_rate >= 0.5
+        ):  # TODO: is the second criterion a good idea? which value should i choose?
             jac = jac_fun(x)
             lu, piv = lu_factor(jac)
             info["n_jaceval"] += 1
             info["n_lu"] += 1
             logger.debug(
-                f"Recomputing Jacobian in iteration {iter+1}, conv_rate: {conv_rate}"
+                f"Recomputing Jacobian in iteration {iter + 1}, conv_rate: {conv_rate}"
             )
         iter += 1
         norm_delta_last = norm_delta
@@ -162,13 +162,13 @@ def NewtonODE(
         if eta * norm_delta < tol_iter:  # normal convergence check
             success = True
             info["stop_reason"] = "success"
-            logger.debug(f"Finished Newton after {iter+1} iterations with success")
+            logger.debug(f"Finished Newton after {iter + 1} iterations with success")
             break
         elif conv_rate >= 1:  # check for divergence
             success = False
             info["stop_reason"] = "divergence"
             logger.warning(
-                f"Divergence of Newton in iteration {iter+1}, conv_rate = {conv_rate}"
+                f"Divergence of Newton in iteration {iter + 1}, conv_rate = {conv_rate}"
             )
             break
         elif (
@@ -178,7 +178,7 @@ def NewtonODE(
             success = False
             info["stop_reason"] = "slow convergence"
             logger.warning(
-                f"Too slow convergence of Newton in iteration {iter+1} for k_max = {max_iter}, conv_rate = {conv_rate}"
+                f"Too slow convergence of Newton in iteration {iter + 1} for k_max = {max_iter}, conv_rate = {conv_rate}"
             )
             break
 
@@ -191,7 +191,7 @@ def NewtonODE(
             info["n_jaceval"] += 1
             info["n_lu"] += 1
             logger.debug(
-                f"Recomputing Jacobian in iteration {iter+1}, conv_rate = {conv_rate}"
+                f"Recomputing Jacobian in iteration {iter + 1}, conv_rate = {conv_rate}"
             )
         iter += 1
         norm_delta_last = norm_delta
