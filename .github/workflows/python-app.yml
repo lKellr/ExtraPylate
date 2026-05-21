@@ -30,9 +30,9 @@ jobs:
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
     - name: Lint code with Ruff
       run: ruff check --output-format=github --target-version=py310
-    - name: Test with pytest
     - name: Check code formatting with Ruff
       run: ruff format --diff --target-version=py310
       continue-on-error: true
+    - name: Test with pytest
       run: |
         pytest
