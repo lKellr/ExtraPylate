@@ -1,3 +1,4 @@
+from functools import cached_property
 import logging
 from abc import ABC, abstractmethod
 from typing import (
@@ -121,6 +122,13 @@ class ExtrapolationSolver(ABC):
         self.order_exponent = 2 if is_symmetric else 1
         self.table_size: int = table_size
         self.dtype = dtype
+
+        assert all(
+            [
+                self.get_local_order(k + 1) > self.get_local_order(k)
+                for k in range(self.table_size)
+            ]
+        ), "Local order must increase."
 
         if is_symmetric:
             assert all(
@@ -653,7 +661,6 @@ class ModMidpointExtrapolation(ExtrapolationSolver):
             step_controller=step_controller,
             dtype=dtype,
         )
-        self.even_substep_seq = (self.substep_seq % 2 == 0).all()
         if not self.even_substep_seq:
             logger.warning("Order reduction due to non-even step sequence")
         if use_smoothing:
@@ -669,6 +676,10 @@ class ModMidpointExtrapolation(ExtrapolationSolver):
             total_feval_cost_for_k=total_feval_cost_for_k,
             local_order_func=self.get_local_order,
         )
+
+    @cached_property
+    def even_substep_seq(self) -> bool:
+        return (self.substep_seq % 2 == 0).all()
 
     def get_local_order(self, k: int) -> int:
         if self.even_substep_seq:
@@ -755,7 +766,6 @@ class ModMidpointExtrapolationMass(ExtrapolationSolver):
             step_controller=step_controller,
             dtype=dtype,
         )
-        self.even_substep_seq = (self.substep_seq % 2 == 0).all()
         if not self.even_substep_seq:
             logger.warning("Order reduction due to non-even step sequence")
         if use_smoothing:
@@ -781,6 +791,10 @@ class ModMidpointExtrapolationMass(ExtrapolationSolver):
         )
 
         self.lu_and_piv_mass = lu_factor(mass_matrix)
+
+    @cached_property
+    def even_substep_seq(self) -> bool:
+        return (self.substep_seq % 2 == 0).all()
 
     def get_local_order(self, k: int) -> int:
         if self.even_substep_seq:
