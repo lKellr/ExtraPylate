@@ -18,8 +18,9 @@ Some test problems are supplied. Additionally, there are so scripts to evaluate 
 # Examples
 ## work-precision graphs
 ![work-precision-explicit](work_precision.png)
+_currently only single point values, no graphs_
 
-## N-body simulation
+## N-body problem simulation
 ![N-body](N-body.gif)
 
 ## Convergence of extrapolation schemes of increasing order
