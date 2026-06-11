@@ -184,6 +184,7 @@ def AB3(
         logger.warning(
             f"final step not hitting t_max exactly, instead t_max = {steps * h}"
         )
+    assert steps >= 2, f"{steps} steps not enough for AB3"
 
     info: dict[str, Any] = dict(
         n_feval=0,
