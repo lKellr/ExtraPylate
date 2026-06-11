@@ -1,6 +1,6 @@
 import logging
 from abc import ABC, abstractmethod
-from typing import Callable, Literal, NamedTuple, override
+from typing import Callable, Literal, NamedTuple
 
 import numpy as np
 from numpy.typing import DTypeLike, NDArray
@@ -415,7 +415,6 @@ class StepControllerExtrapKH_HW(StepControllerExtrap):
 
         self.error_ratios_k = np.empty((table_size - 1,), self.dtype)
 
-    @override
     def evaluate_step(
         self,
         error: NDArray[np.floating],
@@ -454,7 +453,6 @@ class StepControllerExtrapKH_HW(StepControllerExtrap):
                 )
         return state
 
-    @override
     def get_most_efficient_parameters(
         self,
         k_final: int,
@@ -588,7 +586,6 @@ class StepControllerExtrapKH_Deuflhard(StepControllerExtrapKH_HW):
         self.is_greedy = is_greedy
         self.work_order_limits = work_order_limits
 
-    @override
     def get_most_efficient_parameters(
         self,
         k_final: int,
@@ -807,7 +804,6 @@ class StepControllerExtrapH(StepControllerExtrap):
         self.error_ratio = error_ratio
         return state
 
-    @override
     def get_most_efficient_parameters(
         self,
         k_final: int,
@@ -875,7 +871,6 @@ class StepControllerExtrapK(StepControllerExtrap):
             dtype=self.dtype,
         )  # NOTE: first entry is never used
 
-    @override
     def evaluate_step(
         self,
         error: NDArray[np.floating],
@@ -920,7 +915,6 @@ class StepControllerExtrapK(StepControllerExtrap):
         self.error_ratio = error_ratio
         return state
 
-    @override
     def get_most_efficient_parameters(
         self,
         k_final: int,
@@ -975,7 +969,6 @@ class StepControllerExtrapDummy(StepControllerExtrap):
             local_order_func,
         )
 
-    @override
     def evaluate_step(
         self,
         error: NDArray[np.floating],
@@ -1001,7 +994,6 @@ class StepControllerExtrapDummy(StepControllerExtrap):
             )
         return state
 
-    @override
     def get_most_efficient_parameters(
         self,
         k_final: int,
@@ -1059,7 +1051,6 @@ class StepControllerExtrapBulirsch(StepControllerExtrap):
         )
         self.k_min = 3
 
-    @override
     def evaluate_step(
         self,
         error: NDArray[np.floating],
@@ -1098,7 +1089,6 @@ class StepControllerExtrapBulirsch(StepControllerExtrap):
         self.error_ratio = error_ratio
         return state
 
-    @override
     def get_most_efficient_parameters(
         self,
         k_final: int,

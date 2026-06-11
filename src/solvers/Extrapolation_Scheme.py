@@ -5,7 +5,6 @@ from typing import (
     Callable,
     Literal,
     NamedTuple,
-    override,
 )
 
 import numpy as np
@@ -513,11 +512,9 @@ class EulerExtrapolation(ExtrapolationSolver):
             local_order_func=self.get_local_order,
         )
 
-    @override
     def get_local_order(self, k: int) -> int:
         return k + 1
 
-    @override
     def base_scheme(
         self,
         x0: NDArray[np.floating],
@@ -593,11 +590,9 @@ class EulerExtrapolationMass(ExtrapolationSolver):
 
         self.lu_and_piv_mass = lu_factor(mass_matrix)
 
-    @override
     def get_local_order(self, k: int) -> int:
         return k + 1
 
-    @override
     def base_scheme(
         self,
         x0: NDArray[np.floating],
@@ -675,18 +670,15 @@ class ModMidpointExtrapolation(ExtrapolationSolver):
             local_order_func=self.get_local_order,
         )
 
-    @override
     def get_local_order(self, k: int) -> int:
         if self.even_substep_seq:
             return 2 * k + 2
         else:
             return 2 * k + 1
 
-    @override
     def _fevals_per_base_solve(self, n_substeps: int) -> int:
         return n_substeps + self.use_smoothing
 
-    @override
     def base_scheme(
         self,
         x0: NDArray[np.floating],
@@ -790,18 +782,15 @@ class ModMidpointExtrapolationMass(ExtrapolationSolver):
 
         self.lu_and_piv_mass = lu_factor(mass_matrix)
 
-    @override
     def get_local_order(self, k: int) -> int:
         if self.even_substep_seq:
             return 2 * k + 2
         else:
             return 2 * k + 1
 
-    @override
     def _fevals_per_base_solve(self, n_substeps: int) -> int:
         return n_substeps + self.use_smoothing
 
-    @override
     def base_scheme(
         self,
         x0: NDArray[np.floating],
@@ -907,7 +896,6 @@ class ModMidpointExtrapolationRational(ModMidpointExtrapolation):
             dtype,
         )
 
-    @override
     def fill_extrapolation_table(
         self,
         T_fine_first_order: NDArray[np.floating],
@@ -1025,11 +1013,9 @@ class LimplicitEulerExtrapolation(ExtrapolationSolver):
             local_order_func=self.get_local_order,
         )
 
-    @override
     def get_local_order(self, k: int) -> int:
         return k + 1
 
-    @override
     def base_scheme(
         self,
         x0: NDArray[np.floating],
@@ -1173,12 +1159,10 @@ class LimplicitMidpointExtrapolation(ExtrapolationSolver):
             local_order_func=self.get_local_order,
         )
 
-    @override
     def get_local_order(self, k: int) -> int:
         return 2 * k + 1  # default choice, SIMP1
         # return 2 * k + 2 # possibly more conservative choice, might benmore accurate for nonlinear + highly stiff problems, early? versions of METAN1
 
-    @override
     def base_scheme(
         self,
         x0: NDArray[np.floating],
