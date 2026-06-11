@@ -481,7 +481,7 @@ def TRBDF2(
         def jac_imp_Newton1(
             x_next: NDArray[np.floating], t_i: float
         ) -> NDArray[np.floating]:
-            return np.eye(x0.shape[0]) - numerical_jacobian_t(
+            return np.eye(x0.shape[0]) - 0.25 * h * numerical_jacobian_t(
                 t_i + 0.5 * h,
                 x_next,
                 ode_fun,
@@ -503,7 +503,7 @@ def TRBDF2(
         def jac_imp_Newton1(
             x_next: NDArray[np.floating], t_i: float
         ) -> NDArray[np.floating]:
-            return np.eye(x0.shape[0]) - jac_fun(t_i + 0.5 * h, x_next)
+            return np.eye(x0.shape[0]) - 0.25 * h * jac_fun(t_i + 0.5 * h, x_next)
 
         def jac_imp_Newton2(
             x_next: NDArray[np.floating], t_i: float
@@ -521,7 +521,7 @@ def TRBDF2(
     sol2_info = dict(eta=np.inf)
     for i in range(steps):
         x_halftrapz, success, sol1_info = nl_solver(
-            partial(f_imp_Newton1, t_i=t[i + 1], x_i=x[i]),
+            partial(f_imp_Newton1, t_i=t[i], x_i=x[i]),
             x0=x[i],
             tol_iter=norm_hairer(solvertol * x[i]) + solvertol,
             jac_fun=partial(jac_imp_Newton1, t_i=t[i]),
