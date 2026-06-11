@@ -13,6 +13,8 @@ from modules.root_finding import NewtonODE
 
 logger = logging.getLogger(__name__)
 
+logger = logging.getLogger(__name__)
+
 
 def Backwards_Euler(
     ode_fun: Callable[[float, NDArray[np.floating]], NDArray[np.floating]],
@@ -289,6 +291,7 @@ def _AM_k(
             norm=norm_hairer,
             eta_old=sol_info["eta"],
         )
+        f_i[0] = ode_fun(t0 + (i + 1) * h, x[i + 1])
 
         if not success:
             logger.warning("solver did not converge")
