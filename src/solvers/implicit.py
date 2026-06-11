@@ -51,12 +51,14 @@ def Backwards_Euler(
     )
 
     if jac_fun is None:
-        jac_fun = lambda t, x: numerical_jacobian_t(
-            t,
-            x,
-            ode_fun,
-            delta=1e-8,
-        )
+
+        def jac_fun(t: float, x: NDArray[np.floating]):
+            return numerical_jacobian_t(
+                t,
+                x,
+                ode_fun,
+                delta=1e-8,
+            )
 
     def f_imp_Newton(
         x_next: NDArray[np.floating], t_i: float, x_i: NDArray[np.floating]
@@ -393,6 +395,7 @@ def BDF2(
         )
         info = inf_starter
 
+    sol_info: dict[str, float] = dict(eta=np.inf)
     for i in range(1, steps):
         x[i + 1], success, sol_info = nl_solver(
             partial(f_imp_Newton, t_i=t[i + 1], x_i=x[i], x_ii=x[i - 1]),
@@ -644,6 +647,7 @@ def BDF3(
         )
         info = inf_starter
 
+    sol_info: dict[str, float] = dict(eta=np.inf)
     for i in range(2, steps):
         x[i + 1], success, sol_info = nl_solver(
             partial(

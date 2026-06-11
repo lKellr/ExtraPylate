@@ -1,19 +1,23 @@
 import numpy as np
+from numpy.typing import NDArray
 from modules.helpers import *
 from modules.root_finding import *
 import pytest
 
 
 def test_numerical_jacobian():
-    f = lambda x: np.array(
-        [1.0 + x[0] * x[0] * x[1] - 4 * x[0], 3 * x[0] - x[0] * x[0] * x[1]]
-    )
-    df = lambda x: np.array(
-        [
-            [2 * x[0] * x[1] - 4.0, x[0] * x[0]],
-            [3.0 - 2 * x[0] * x[1], -x[0] * x[0]],
-        ]
-    )
+    def f(x: NDArray[np.floating]) -> NDArray[np.floating]:
+        return np.array(
+            [1.0 + x[0] * x[0] * x[1] - 4 * x[0], 3 * x[0] - x[0] * x[0] * x[1]]
+        )
+
+    def df(x: NDArray[np.floating]) -> NDArray[np.floating]:
+        return np.array(
+            [
+                [2 * x[0] * x[1] - 4.0, x[0] * x[0]],
+                [3.0 - 2 * x[0] * x[1], -x[0] * x[0]],
+            ]
+        )
     x0 = np.array([2.0, 2.5])
 
     df_num = numerical_jacobian(x0, f, delta=1e-6)
@@ -23,15 +27,18 @@ def test_numerical_jacobian():
 
 
 def test_numerical_jacobian_t():
-    f = lambda t, x: np.array(
-        [t + x[0] * x[0] * x[1] - 4 * x[0], t * x[0] - x[0] * x[0] * x[1]]
-    )
-    df = lambda t, x: np.array(
-        [
-            [2 * x[0] * x[1] - 4.0, x[0] * x[0]],
-            [t - 2 * x[0] * x[1], -x[0] * x[0]],
-        ]
-    )
+    def f(t: float, x: NDArray[np.floating]) -> NDArray[np.floating]:
+        return np.array(
+            [t + x[0] * x[0] * x[1] - 4 * x[0], t * x[0] - x[0] * x[0] * x[1]]
+        )
+
+    def df(t: float, x: NDArray[np.floating]) -> NDArray[np.floating]:
+        return np.array(
+            [
+                [2 * x[0] * x[1] - 4.0, x[0] * x[0]],
+                [t - 2 * x[0] * x[1], -x[0] * x[0]],
+            ]
+        )
     x0 = np.array([2.0, 2.5])
     t0 = 1.5
 
@@ -43,7 +50,9 @@ def test_numerical_jacobian_t():
 
 @pytest.mark.parametrize("method", [Secant_method, Bisection])
 def test_root_finding_scalar(method):
-    f = lambda x: x * np.exp(-np.abs(x))  # x_0 = 0.0
+    def f(x: NDArray[np.floating]) -> NDArray[np.floating]:
+        return x * np.exp(-np.abs(x))  # x_0 = 0.0
+
     # f = lambda x: (x - 0.7) ** 4  # x_0 = 0.7
     # f = lambda x: 2 * (x - 0.7) + 0.03 * (x - 0.7) ** 3  # x_0 = 0.7
     # f = lambda x: np.clip(x, -1, 1)  # x_0 = 0.0
@@ -57,15 +66,18 @@ def test_root_finding_scalar(method):
     [(Newton, {}), (root_wrapped, {}), (NewtonODE, {"eta_old": 1.0})],
 )  # NewtonODE, root_wrapped
 def test_root_finding_multivar(method, additional_kwargs):
-    f = lambda x: np.array(
-        [x[0] + 0.5 * (x[0] - x[1]) ** 3 - 1.0, 0.5 * (x[1] - x[0]) ** 3 + x[1]]
-    )
-    jac = lambda x: np.array(
-        [
-            [1 + 1.5 * (x[0] - x[1]) ** 2, -1.5 * (x[0] - x[1]) ** 2],
-            [-1.5 * (x[1] - x[0]) ** 2, 1 + 1.5 * (x[1] - x[0]) ** 2],
-        ]
-    )
+    def f(x: NDArray[np.floating]) -> NDArray[np.floating]:
+        return np.array(
+            [x[0] + 0.5 * (x[0] - x[1]) ** 3 - 1.0, 0.5 * (x[1] - x[0]) ** 3 + x[1]]
+        )
+
+    def jac(x: NDArray[np.floating]) -> NDArray[np.floating]:
+        return np.array(
+            [
+                [1 + 1.5 * (x[0] - x[1]) ** 2, -1.5 * (x[0] - x[1]) ** 2],
+                [-1.5 * (x[1] - x[0]) ** 2, 1 + 1.5 * (x[1] - x[0]) ** 2],
+            ]
+        )
     x0 = np.array([0.5, 0.0])
     x_sol = np.array([0.8411639, 0.1588361])
     res, success, info = method(f, x0, jac, tol_iter=1e-5, **additional_kwargs)

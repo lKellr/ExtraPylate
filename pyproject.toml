@@ -26,3 +26,4 @@ select = ["E4", "E7", "E9", "F"]
 
 [tool.ruff.lint.per-file-ignores]
 "problems/*" = ["F401", "F403", "F405"]
+"tests/*" = ["F403", "F405"]

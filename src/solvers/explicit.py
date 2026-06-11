@@ -336,10 +336,10 @@ def PECE_tol(
     if x_start is None:
         _, x[:3], inf_starter = AB2(ode_fun, x0, t0 + 2 * h, h, t0)
         info = inf_starter
-        f_i: NDArray[tuple[Any, ...], np.dtype[floating[Any]]] = ode_fun(
+        f_i: NDArray[np.floating] = ode_fun(
             t[1], x[1]
         )  # TODO: this has already been evaluated in the starting method
-        f_ii: NDArray[tuple[Any, ...], np.dtype[floating[Any]]] = ode_fun(t[0], x[0])
+        f_ii: NDArray[np.floating] = ode_fun(t[0], x[0])
     else:
         assert x_start.shape == (
             3,

@@ -5,7 +5,6 @@ from solvers.embedded import *
 from solvers.explicit import *
 from solvers.implicit import *
 from solvers.Extrapolation_Scheme import *
-from modules.step_control import StepControllerExtrapDummy
 
 
 class TestConvergence:
