@@ -184,7 +184,7 @@ class StepControllerPI(StepController):
         if accepted:
             if logger.isEnabledFor(logging.DEBUG):
                 logger.debug(
-                    msg=f"Accepting step"
+                    msg="Accepting step"
                     + (" with retry correction" if self.is_retry else "")
                 )
             step_fac = get_step_PI(
@@ -906,12 +906,12 @@ class StepControllerExtrapK(StepControllerExtrap):
                 if k_curr < self.table_size - 1:
                     state = "continue"
                     logger.warning(
-                        f"Error tolerance will probably not be met until the end of the table. Continuing anyway."
+                        "Error tolerance will probably not be met until the end of the table. Continuing anyway."
                     )
                 else:
                     state = "accepted"
                     logger.critical(
-                        f"Error tolerance can't be met with the current step and table size. Continuing anyway."
+                        "Error tolerance can't be met with the current step and table size. Continuing anyway."
                     )
             if logger.isEnabledFor(logging.DEBUG):
                 logger.debug(

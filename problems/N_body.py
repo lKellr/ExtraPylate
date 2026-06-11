@@ -100,7 +100,7 @@ print(f"solution took {prof_elapsed:.3f} s for DP54")
 fig, ax = plt.subplots(figsize=(16, 6), layout="tight")
 fig.set_tight_layout(True)
 time_text = ax.text(
-    0.95, 0.05, f"t = 0 yr", transform=ax.transAxes, horizontalalignment="right"
+    0.95, 0.05, "t = 0 yr", transform=ax.transAxes, horizontalalignment="right"
 )
 
 traces = []

@@ -1,7 +1,5 @@
-from numpy._typing._array_like import NDArray
-
-
 from typing import Any
+from numpy.typing import NDArray
 
 
 import numpy as np
@@ -21,7 +19,8 @@ logging.basicConfig(level=logging.DEBUG)
 
 # rescaled Van der Pol oscillator
 epsilon = 1e-6
-x_dot = lambda t, x: np.array([x[1], ((1 - x[0] ** 2) * x[1] - x[0]) / epsilon])
+def x_dot(t: float, x: NDArray[np.floating]) -> NDArray[np.floating]:
+    return np.array([x[1], ((1 - x[0] ** 2) * x[1] - x[0]) / epsilon])
 t_max = 1
 x0: NDArray[Any] = np.array([2.0, 0.0])
 

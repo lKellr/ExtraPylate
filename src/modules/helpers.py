@@ -4,9 +4,8 @@ from numpy.typing import NDArray
 from scipy.optimize import root
 from numba import jit, float64
 
-norm_hairer: Callable[[NDArray[np.floating]], np.floating] = lambda x: np.sqrt(
-    np.sum(x**2) / x.size
-)
+def norm_hairer(x: NDArray[np.floating]) -> np.floating:
+    return np.sqrt(np.sum(x**2) / x.size)
 
 
 @jit(float64(float64[:]))
@@ -16,9 +15,10 @@ def norm_hairer_jit(x: np.floating) -> np.floating:
     return np.sqrt(np.sum(x**2) / x.size)
 
 
-clip: Callable[[float, float, float], float] = lambda x, x_min, x_max: min(
-    max(x, x_min), x_max
-)  # runs faster then np.clip since we do  not deal with arrays
+def clip(x: float, x_min: float, x_max: float) -> float:
+    return min(
+        max(x, x_min), x_max
+    )  # runs faster then np.clip since we do  not deal with arrays
 
 
 def root_wrapped(

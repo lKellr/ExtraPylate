@@ -1,7 +1,8 @@
 import numpy as np
 from matplotlib import pyplot as plt
+from numpy.typing import NDArray
 
-from modules.step_control import ControllerPIParams, StepControllerExtrapKH_HW
+from modules.step_control import StepControllerExtrapKH_HW
 from solvers.embedded import *
 from solvers.explicit import *
 from solvers.Extrapolation_Scheme import EulerExtrapolation
@@ -17,17 +18,19 @@ logger_pil.setLevel(logging.INFO)
 cmap: plt.Colormap = plt.get_cmap("tab20")
 
 
-x_dot = lambda t, x: np.array(
-    [
-        2 * t * x[0] * np.log(np.maximum(x[1], 1e-3)),
-        -2 * t * x[1] * np.log(np.maximum(x[0], 1e-3)),
-    ]
-)
+def x_dot(t: float, x: NDArray[np.floating]) -> NDArray[np.floating]:
+    return np.array(
+        [
+            2 * t * x[0] * np.log(np.maximum(x[1], 1e-3)),
+            -2 * t * x[1] * np.log(np.maximum(x[0], 1e-3)),
+        ]
+    )
 
 t_max = 5.0
 x0 = np.array([1.0, np.e])
 
-x_analytic = lambda t: np.array([np.exp(np.sin(t * t)), np.exp(np.cos(t * t))]).T
+def x_analytic(t: float) -> NDArray[np.floating]:
+    return np.array([np.exp(np.sin(t * t)), np.exp(np.cos(t * t))]).T
 
 results = dict()
 results["BS32"] = BS32(x_dot, x0, t_max, atol=1e-5, rtol=1e-3)

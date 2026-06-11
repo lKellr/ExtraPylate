@@ -1,5 +1,3 @@
-from numpy._typing._array_like import NDArray
-from numpy import copy, floating
 from typing import Any, Callable
 import numpy as np
 from numpy.typing import NDArray

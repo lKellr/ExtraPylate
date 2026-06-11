@@ -69,7 +69,9 @@ def Newton(
     )
 
     if jac_fun is None:
-        jac_fun = lambda x: numerical_jacobian(x, fun, delta=1e-8)
+
+        def jac_fun(x):
+            return numerical_jacobian(x, fun, delta=1e-8)
     else:
         jac_fun = jac_fun
 
@@ -137,7 +139,9 @@ def NewtonODE(
     )
 
     if jac_fun is None:
-        jac_fun = lambda x: numerical_jacobian(x, fun, delta=1e-8)
+
+        def jac_fun(x):
+            return numerical_jacobian(x, fun, delta=1e-8)
     else:
         jac_fun = jac_fun
 

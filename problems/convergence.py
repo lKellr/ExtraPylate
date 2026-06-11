@@ -1,12 +1,9 @@
 import numpy as np
 from matplotlib import pyplot as plt
+from numpy.typing import NDArray
 
 from modules.step_control import (
-    ControllerPIParams,
     StepControllerExtrapDummy,
-    StepControllerExtrapK,
-    StepControllerExtrapH,
-    StepControllerExtrapKH_HW,
 )
 from solvers.embedded import *
 from solvers.explicit import *
@@ -22,19 +19,18 @@ logger_pil.setLevel(logging.INFO)
 cmap = plt.get_cmap("tab20")
 
 
-x_dot: Callable[[float, NDArray[np.floating]], NDArray[np.floating]] = (
-    lambda t, x: x * (2.0 - np.sin(t))
-)
-jac: Callable[[float, NDArray[np.floating]], NDArray[np.floating]] = (
-    lambda t, x: 2.0 - np.sin(t)
-)
+def x_dot(t: float, x: NDArray[np.floating]) -> NDArray[np.floating]:
+    return x * (2.0 - np.sin(t))
+
+
+def jac(t: float, x: NDArray[np.floating]) -> NDArray[np.floating]:
+    return 2.0 - np.sin(t)
 
 t_max = 1.0
 x0 = np.array([2.0])
 
-x_analytic: Callable[[float], NDArray[np.floating]] = lambda t: 2 * np.exp(
-    2 * t + np.cos(t) - 1.0
-)
+def x_analytic(t: float) -> NDArray[np.floating]:
+    return 2 * np.exp(2 * t + np.cos(t) - 1.0)
 
 norm = norm_hairer
 

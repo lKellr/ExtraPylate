@@ -61,7 +61,7 @@ fig, ax = plt.subplots()
 for i in range(0, n * dim, dim):
     ax.plot(result[:, i], result[:, i + 1], "--", label=f"object {i//dim}")
 
-time_text = ax.text(0.5, 0.9, f"t = 0.", transform=ax.transAxes)
+time_text = ax.text(0.5, 0.9, "t = 0.", transform=ax.transAxes)
 
 pcol = ax.scatter(
     result[0, : n * dim : 2], result[0, 1 : n * dim : 2], s=500 * np.log10(1 + masses)

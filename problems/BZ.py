@@ -1,9 +1,8 @@
 import numpy as np
 from matplotlib import pyplot as plt
 from solvers.implicit import *
-from solvers.embedded import DP54
-from solvers.Extrapolation_Scheme import LimplicitEulerExtrapolation
 import logging
+from numpy.typing import NDArray
 
 logging.basicConfig(level=logging.DEBUG)
 logger_mpb = logging.getLogger("matplotlib")
@@ -16,14 +15,18 @@ q = 8.375e-6
 w = 0.161
 f = 1.0
 
-x_dot: Callable[[float, NDArray[floating]], NDArray[floating]] = lambda t, x: np.array(
-    [
-        s * (x[1] - x[1] * x[0] + x[0] - q * x[0] ** 2),
-        1 / s * (-x[1] - x[1] * x[0] + f * x[2]),
-        w * (x[0] - x[2]),
-    ],
-    dtype=x.dtype,
-)
+
+def x_dot(t: float, x: NDArray[np.floating]) -> NDArray[np.floating]:
+    return np.array(
+        [
+            s * (x[1] - x[1] * x[0] + x[0] - q * x[0] ** 2),
+            1 / s * (-x[1] - x[1] * x[0] + f * x[2]),
+            w * (x[0] - x[2]),
+        ],
+        dtype=x.dtype,
+    )
+
+
 t_max = 350.0
 x0 = np.array([488.68, 0.99796, 488.68])
 

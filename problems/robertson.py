@@ -1,8 +1,11 @@
+from typing import Any
+
 import numpy as np
 from matplotlib import pyplot as plt
 from solvers.simple_explicit import *
 from solvers.Extrapolation_Scheme import SEULEX
 import logging
+from numpy.typing import NDArray
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -10,14 +13,19 @@ logging.basicConfig(level=logging.DEBUG)
 a = 0.04
 b = 1e4
 c = 3e7
-x_dot = lambda t, x: np.array(
-    [
-        -a * x[0] + b * x[1] * x[2],
-        a * x[0] - b * x[1] * x[2] - c * x[1] * x[1],
-        c * x[1] * x[1],
-    ],
-    dtype=x.dtype,
-)
+
+
+def x_dot(t: float, x: NDArray[np.floating]) -> NDArray[np.floating]:
+    return np.array(
+        [
+            -a * x[0] + b * x[1] * x[2],
+            a * x[0] - b * x[1] * x[2] - c * x[1] * x[1],
+            c * x[1] * x[1],
+        ],
+        dtype=x.dtype,
+    )
+
+
 t_max = 40.0  # interesting solutions for t_max ~ 1e11
 x0 = np.array([1.0, 0.0, 0.0])
 

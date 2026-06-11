@@ -2,7 +2,7 @@ import numpy as np
 from matplotlib import pyplot as plt
 from scipy.integrate import solve_ivp
 from modules.helpers import norm_hairer_jit
-from modules.step_control import ControllerPIParams, StepControllerExtrapKH_HW
+from modules.step_control import StepControllerExtrapKH_HW
 from solvers.embedded import DP54
 from solvers.explicit import *
 from solvers.Extrapolation_Scheme import *

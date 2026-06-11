@@ -1,17 +1,12 @@
-from numpy._typing._array_like import NDArray
-from numpy import floating
-from numpy._typing._array_like import NDArray
 from typing import Callable, Any
 import numpy as np
 from numpy.typing import NDArray
 from scipy.special import comb
 from modules.helpers import (
     norm_hairer,
-    numerical_jacobian,
     numerical_jacobian_t,
-    root_wrapped,
 )
-from modules.root_finding import Newton, NewtonODE
+from modules.root_finding import NewtonODE
 
 
 def Backwards_Euler(
@@ -48,15 +43,18 @@ def Backwards_Euler(
     x = np.zeros((steps + 1, x0.shape[0]), dtype=x0.dtype)
 
     x[0] = x0
+    sol_info = dict(eta=np.inf)
     for i in range(steps):
-        f_imp = lambda x_next: x_next - x[i] - h * ode_fun(t[i + 1], x_next)
+
+        def f_imp(x_next):
+            return x_next - x[i] - h * ode_fun(t[i + 1], x_next)
         x[i + 1], success, sol_info = nl_solver(
             f_imp,
             x0=x[i],
             tol_iter=norm_hairer(solvertol * x[i]) + solvertol,
             jac_fun=jac_fun,
             norm=norm_hairer,
-            eta_old=sol_info["eta"] if i > 1 else np.inf,
+            eta_old=sol_info["eta"],
         )
         if not success:
             print(f"solver did not converge, reason: {sol_info['stop_reason']}")
@@ -157,6 +155,7 @@ def _AM_k(
         f_i[0] = ode_fun(t0, x0)
 
     steps_starter = k - 2 if k > 1 else 0
+    sol_info = dict(eta=np.inf)
     for i in range(steps_starter, steps):
         f_i = np.roll(f_i, 1, axis=0)
 
@@ -172,12 +171,11 @@ def _AM_k(
         if (
             jac_fun is None
         ):  # Jacobian without setting f_i[0] # TODO: this is probably not efficient
-            jac_fun = lambda x_next: (
-                np.eye(x_next.shape[0])
-                - h
-                * beta[0]
-                * numerical_jacobian_t(t0 + (i + 1) * h, x_next, ode_fun, 1e-8)
-            )
+
+            def jac_fun(x_next):
+                return np.eye(x_next.shape[0]) - h * beta[0] * numerical_jacobian_t(
+                    t0 + (i + 1) * h, x_next, ode_fun, 1e-8
+                )
 
         x[i + 1], success, sol_info = nl_solver(
             f_imp,
@@ -185,7 +183,7 @@ def _AM_k(
             tol_iter=norm_hairer(solvertol * x[i]) + solvertol,
             jac_fun=jac_fun,
             norm=norm_hairer,
-            eta_old=sol_info["eta"] if i > steps_starter else np.inf,
+            eta_old=sol_info["eta"],
         )
 
         if not success:
@@ -241,21 +239,23 @@ def BDF2(
         solvertol=solvertol,
     )
     info = inf_starter
-
+    sol_info = dict(eta=np.inf)
     for i in range(1, steps):
-        f_imp = lambda x_next: (
-            x_next
-            - 4 / 3 * x[i]
-            + 1 / 3 * x[i - 1]
-            - 2 / 3 * h * ode_fun(t[i + 1], x_next)
-        )
+
+        def f_imp(x_next):
+            return (
+                x_next
+                - 4 / 3 * x[i]
+                + 1 / 3 * x[i - 1]
+                - 2 / 3 * h * ode_fun(t[i + 1], x_next)
+            )
         x[i + 1], success, sol_info = nl_solver(
             f_imp,
             x0=x[i],
             tol_iter=norm_hairer(solvertol * x[i]) + solvertol,
             jac_fun=jac_fun,
             norm=norm_hairer,
-            eta_old=sol_info["eta"] if i > 1 else np.inf,
+            eta_old=sol_info["eta"],
         )
         if not success:
             print("solver did not converge")
@@ -301,23 +301,24 @@ def TRBDF2(
     x = np.zeros((steps + 1, x0.shape[0]), dtype=x0.dtype)
 
     x[0] = x0
+    sol1_info = dict(eta=np.inf)
+    sol2_info = dict(eta=np.inf)
     for i in range(steps):
-        f_imp1 = lambda x_halftrapz: (
-            x_halftrapz
-            - (
+
+        def f_imp1(x_halftrapz):
+            return x_halftrapz - (
                 x[i]
                 + 0.25
                 * h
                 * (ode_fun(t[i], x[i]) + ode_fun(t[i] + 0.5 * h, x_halftrapz))
             )
-        )
         x_halftrapz, success, sol1_info = nl_solver(
             f_imp1,
             x0=x[i],
             tol_iter=norm_hairer(solvertol * x[i]) + solvertol,
             jac_fun=jac_fun,
             norm=norm_hairer,
-            eta_old=sol1_info["eta"] if i > 1 else np.inf,
+            eta_old=sol1_info["eta"],
         )
         if not success:
             print("solver did not converge")
@@ -326,8 +327,8 @@ def TRBDF2(
         info["n_jaceval"] += sol1_info["n_jaceval"]
         info["n_lu"] += sol1_info["n_lu"]
 
-        f_imp2 = (
-            lambda x_next: (
+        def f_imp2(x_next):
+            return (
                 x_next
                 - 1.0
                 / 3.0
@@ -340,14 +341,13 @@ def TRBDF2(
                     )  # Note that the step is here half of what it is in the normal BDF2 scheme!
                 )
             )
-        )
         x[i + 1], success, sol2_info = nl_solver(
             f_imp2,
             x0=x_halftrapz,
             tol_iter=norm_hairer(solvertol * x[i]) + solvertol,
             jac_fun=jac_fun,
             norm=norm_hairer,
-            eta_old=sol2_info["eta"] if i > 1 else np.inf,
+            eta_old=sol2_info["eta"],
         )
         if not success:
             print("solver did not converge")
@@ -403,22 +403,24 @@ def BDF3(
         jac_fun=jac_fun,
     )
     info = inf_starter
-
+    sol_info = dict(eta=np.inf)
     for i in range(2, steps):
-        f_imp = lambda x_next: (
-            11 * x_next
-            - 18 * x[i]
-            + 9 * x[i - 1]
-            - 2 * x[i - 2]
-            - 6 * h * ode_fun(t[i + 1], x_next)
-        )
+
+        def f_imp(x_next):
+            return (
+                11 * x_next
+                - 18 * x[i]
+                + 9 * x[i - 1]
+                - 2 * x[i - 2]
+                - 6 * h * ode_fun(t[i + 1], x_next)
+            )
         x[i + 1], success, sol_info = nl_solver(
             f_imp,
             x0=x[i],
             tol_iter=norm_hairer(solvertol * x[i]) + solvertol,
             jac_fun=jac_fun,
             norm=norm_hairer,
-            eta_old=sol_info["eta"] if i > 2 else np.inf,
+            eta_old=sol_info["eta"],
         )
 
         if not success:

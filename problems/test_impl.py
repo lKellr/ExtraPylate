@@ -1,22 +1,14 @@
-from numpy._typing._array_like import NDArray
-
-
-from numpy._typing._array_like import NDArray
-
-
-from typing import Any, Callable
-
+from typing import Callable
+from numpy.typing import NDArray
 
 import os
 import numpy as np
 from matplotlib import pyplot as plt
 
 # from solvers.embedded import BS32
-from solvers.Extrapolation_Scheme import LimplicitEulerExtrapolation
-from solvers.explicit import PECE, AB_k
+from solvers.explicit import PECE
 from solvers.implicit import *
 import logging
-from numpy.typing import NDArray
 
 
 logging.basicConfig(level=logging.DEBUG)
@@ -51,15 +43,18 @@ cmap = plt.get_cmap("tab10")
 
 # rescaled Van der Pol oscillator
 epsilon = 1e-6
-x_dot: Callable[[float, NDArray[np.floating]], NDArray[np.floating]] = (
-    lambda t, x: np.array([x[1], ((1 - x[0] ** 2) * x[1] - x[0]) / epsilon])
-)
+
+
+def x_dot(t: float, x: NDArray[np.floating]) -> NDArray[np.floating]:
+    return np.array([x[1], ((1 - x[0] ** 2) * x[1] - x[0]) / epsilon])
+
+
 t_max = 1
 x0: NDArray[np.floating] = np.array([2.0, 0.0])
 
 
 ref_path = (
-    f"reference_VdP"  # TODO: change if t_max, x0, oscillator parameters are changed
+    "reference_VdP"  # TODO: change if t_max, x0, oscillator parameters are changed
 )
 if os.path.exists(ref_path + ".npz"):
     dat = np.load(ref_path + ".npz")
@@ -67,9 +62,11 @@ if os.path.exists(ref_path + ".npz"):
 else:
     t_high, x_high, _ = BDF3(x_dot, x0, t_max, 1e-4)
     np.savez_compressed(ref_path, t=t_high, x=x_high)
-x_analytic = lambda t: np.array(
-    [np.interp(t, t_high, x_high[:, i]) for i in range(2)]
-).T
+
+
+def x_analytic(t):
+    return np.array([np.interp(t, t_high, x_high[:, i]) for i in range(2)]).T
+
 
 results = dict()
 h = 1e-2

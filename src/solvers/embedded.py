@@ -1,10 +1,7 @@
 import logging
-from numpy._typing._array_like import NDArray
-from numpy import copy, floating
 from typing import Any, Callable
 import numpy as np
 from numpy.typing import NDArray
-from modules.helpers import norm_hairer
 from modules.step_control import (
     get_default_PI_parameters,
     StepControllerPI,

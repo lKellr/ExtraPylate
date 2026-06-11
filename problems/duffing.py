@@ -1,12 +1,10 @@
 import numpy as np
 from matplotlib import pyplot as plt
 import logging
+from numpy.typing import NDArray
 
 from solvers.embedded import DP54
 
-# logging.basicConfig(level=logging.DEBUG)
-# logger_mpb = logging.getLogger("matplotlib")
-# logger_mpb.setLevel(logging.INFO)
 
 ## Duffing oscillator
 alpha = -1.0
@@ -16,9 +14,15 @@ delta = 0.02
 omega = 1.0
 
 
-x_dot = lambda t, x: np.array(
-    [x[1], gamma * np.cos(omega * t) - (delta * x[1] + alpha * x[0] + beta * x[0] ** 3)]
-)
+def x_dot(t: float, x: NDArray[np.floating]) -> NDArray[np.floating]:
+    return np.array(
+        [
+            x[1],
+            gamma * np.cos(omega * t)
+            - (delta * x[1] + alpha * x[0] + beta * x[0] ** 3),
+        ]
+    )
+
 
 t_max = 800 * np.pi
 x0 = np.array([1.0, 0])
