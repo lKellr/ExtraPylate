@@ -59,7 +59,7 @@ time, result, solve_info = DP54(
 fig, ax = plt.subplots()
 
 for i in range(0, n * dim, dim):
-    ax.plot(result[:, i], result[:, i + 1], "--", label=f"object {i//dim}")
+    ax.plot(result[:, i], result[:, i + 1], "--", label=f"object {i // dim}")
 
 time_text = ax.text(0.5, 0.9, "t = 0.", transform=ax.transAxes)
 
