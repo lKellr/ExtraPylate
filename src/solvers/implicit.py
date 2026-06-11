@@ -48,6 +48,7 @@ def Backwards_Euler(
 
         def f_imp(x_next):
             return x_next - x[i] - h * ode_fun(t[i + 1], x_next)
+
         x[i + 1], success, sol_info = nl_solver(
             f_imp,
             x0=x[i],
@@ -249,6 +250,7 @@ def BDF2(
                 + 1 / 3 * x[i - 1]
                 - 2 / 3 * h * ode_fun(t[i + 1], x_next)
             )
+
         x[i + 1], success, sol_info = nl_solver(
             f_imp,
             x0=x[i],
@@ -312,6 +314,7 @@ def TRBDF2(
                 * h
                 * (ode_fun(t[i], x[i]) + ode_fun(t[i] + 0.5 * h, x_halftrapz))
             )
+
         x_halftrapz, success, sol1_info = nl_solver(
             f_imp1,
             x0=x[i],
@@ -341,6 +344,7 @@ def TRBDF2(
                     )  # Note that the step is here half of what it is in the normal BDF2 scheme!
                 )
             )
+
         x[i + 1], success, sol2_info = nl_solver(
             f_imp2,
             x0=x_halftrapz,
@@ -414,6 +418,7 @@ def BDF3(
                 - 2 * x[i - 2]
                 - 6 * h * ode_fun(t[i + 1], x_next)
             )
+
         x[i + 1], success, sol_info = nl_solver(
             f_imp,
             x0=x[i],
@@ -430,4 +435,3 @@ def BDF3(
         info["n_jaceval"] += sol_info["n_jaceval"]
         info["n_lu"] += sol_info["n_lu"]
     return t, x, info
-

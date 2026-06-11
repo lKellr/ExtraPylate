@@ -32,8 +32,10 @@ def x_dot(t: float, x: NDArray[np.floating]) -> NDArray[np.floating]:
         ]
     )
 
+
 t_max = 5.0
 x0 = np.array([1.0, np.e])
+
 
 def x_analytic(t: float) -> NDArray[np.floating]:
     return np.array([np.exp(np.sin(t * t)), np.exp(np.cos(t * t))]).T

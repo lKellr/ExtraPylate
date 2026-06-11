@@ -6,12 +6,15 @@ import logging
 
 logging.basicConfig(level=logging.DEBUG)
 
+
 # Brusselator reaction
 def x_dot(t: float, x: NDArray[np.floating]) -> NDArray[np.floating]:
     return np.array(
         [1.0 + x[0] * x[0] * x[1] - 4 * x[0], 3 * x[0] - x[0] * x[0] * x[1]],
         dtype=x.dtype,
     )
+
+
 t_max = 20.0  # interesting solutions for t_max ~ 1e11
 x0 = np.array([1.5, 3.0])
 

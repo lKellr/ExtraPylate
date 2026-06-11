@@ -4,6 +4,7 @@ from numpy.typing import NDArray
 from scipy.optimize import root
 from numba import jit, float64
 
+
 def norm_hairer(x: NDArray[np.floating]) -> np.floating:
     return np.sqrt(np.sum(x**2) / x.size)
 

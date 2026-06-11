@@ -26,11 +26,14 @@ def x_dot(t: float, x: NDArray[np.floating]) -> NDArray[np.floating]:
 def jac(t: float, x: NDArray[np.floating]) -> NDArray[np.floating]:
     return 2.0 - np.sin(t)
 
+
 t_max = 1.0
 x0 = np.array([2.0])
 
+
 def x_analytic(t: float) -> NDArray[np.floating]:
     return 2 * np.exp(2 * t + np.cos(t) - 1.0)
+
 
 norm = norm_hairer
 
@@ -328,7 +331,7 @@ for i, (scheme_name, (errors, _)) in enumerate(conv_data.items()):
         marker="o",
         linestyle="--" if scheme_name in ["AB3", "RK4"] else "-",
     )
-    rate = np.log(errors[1:]/errors[:-1])/np.log(N_list[:-1]/N_list[1:])
+    rate = np.log(errors[1:] / errors[:-1]) / np.log(N_list[:-1] / N_list[1:])
     ax.text(t_max / N_list[-1], errors[-1], rf"$\bar{{p}} = {np.mean(rate):.2f}$")
     ax.text(t_max / N_list[0], errors[0], f"$p_0 = {rate[0]:.2f}$")
 

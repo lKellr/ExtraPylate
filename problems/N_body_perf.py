@@ -99,7 +99,7 @@ assert x0.size == (2 * n * dim), f"Wrong shape {x0.shape} of initial condition"
 # compile numba
 print(f"x_dot0 = {x_dot(0.0, x0)}")
 e_kin, e_pot = compute_energies(x0)
-print(f"initial energies: e_kin = {e_kin}, e_pot = {e_pot}, e_tot = {e_kin+e_pot}")
+print(f"initial energies: e_kin = {e_kin}, e_pot = {e_pot}, e_tot = {e_kin + e_pot}")
 
 results = dict()
 
@@ -119,7 +119,7 @@ with cProfile.Profile() as pr:
 
 prof_elapsed = perf_counter() - prof_tim_start
 print(
-    f"solution took {prof_elapsed:.3f} s for EULEX, {time.size} steps, {solve_info['n_feval']} function evals, dt_ave {t_max/time.size}"
+    f"solution took {prof_elapsed:.3f} s for EULEX, {time.size} steps, {solve_info['n_feval']} function evals, dt_ave {t_max / time.size}"
 )
 
 # 0.6 s with numba njit, 1.6 s without
@@ -141,7 +141,7 @@ with cProfile.Profile() as pr:
 
 prof_elapsed = perf_counter() - prof_tim_start
 print(
-    f"solution took {prof_elapsed:.3f} s for ODEX, {time.size} steps, {solve_info['n_feval']} function evals, dt_ave {t_max/time.size}"
+    f"solution took {prof_elapsed:.3f} s for ODEX, {time.size} steps, {solve_info['n_feval']} function evals, dt_ave {t_max / time.size}"
 )
 
 results["ODEX"] = time, result, solve_info
@@ -159,7 +159,7 @@ time, result, solve_info = solver_odex2.solve(x0, t_max)
 
 prof_elapsed = perf_counter() - prof_tim_start
 print(
-    f"solution took {prof_elapsed:.3f} s for ODEX-high, {time.size} steps, {solve_info['n_feval']} function evals, dt_ave {t_max/time.size}"
+    f"solution took {prof_elapsed:.3f} s for ODEX-high, {time.size} steps, {solve_info['n_feval']} function evals, dt_ave {t_max / time.size}"
 )
 results["ODEX_high"] = time, result, solve_info
 
@@ -179,7 +179,7 @@ with cProfile.Profile() as pr:
 
 prof_elapsed = perf_counter() - prof_tim_start
 print(
-    f"solution took {prof_elapsed:.3f} s for DP54, {time.size} steps, {solve_info['n_feval']} function evals, dt_ave {t_max/time.size}"
+    f"solution took {prof_elapsed:.3f} s for DP54, {time.size} steps, {solve_info['n_feval']} function evals, dt_ave {t_max / time.size}"
 )
 
 results["DP54"] = time, result, solve_info  # 0.9 s with numba njit, 9.4 s without
@@ -189,7 +189,7 @@ prof_tim_start = perf_counter()
 sol = solve_ivp(x_dot, (0.0, t_max), x0, "RK45", atol=1e-8, rtol=1e-5)
 prof_elapsed = perf_counter() - prof_tim_start
 print(
-    f"solution took {prof_elapsed:.3f} s for scipy DP54, {sol.t.size} steps, {sol.nfev} function evals, dt_ave {t_max/sol.t.size}"
+    f"solution took {prof_elapsed:.3f} s for scipy DP54, {sol.t.size} steps, {sol.nfev} function evals, dt_ave {t_max / sol.t.size}"
 )
 results["SP_RK45"] = (
     sol.t,
@@ -208,7 +208,7 @@ prof_tim_start: float = perf_counter()
 sol = solve_ivp(x_dot, (0.0, t_max), x0, "DOP853", atol=1e-8, rtol=1e-5)
 prof_elapsed = perf_counter() - prof_tim_start
 print(
-    f"solution took {prof_elapsed:.3f} s for scipy DOP853, {sol.t.size} steps, {sol.nfev} function evals, dt_ave {t_max/sol.t.size}"
+    f"solution took {prof_elapsed:.3f} s for scipy DOP853, {sol.t.size} steps, {sol.nfev} function evals, dt_ave {t_max / sol.t.size}"
 )
 results["SP_DOP853"] = (
     sol.t,
