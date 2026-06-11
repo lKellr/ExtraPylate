@@ -16,7 +16,7 @@ license = "MIT"
 
 authors = [{ name = "L. Kellerer", email = "l.kellerer1@gmx.de" }]
 
-dependencies = ["numpy", "scipy", "matplotlib"]
+dependencies = ["numpy", "scipy", "matplotlib", "numba"]
 
 [tool.ruff]
 target-version = "py310"
