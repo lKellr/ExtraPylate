@@ -5,7 +5,7 @@ from numpy.typing import NDArray
 import numpy as np
 from matplotlib import pyplot as plt
 from solvers.simple_explicit import *
-from solvers.Extrapolation_Scheme import SEULEX
+from solvers.Extrapolation_Scheme import LimplicitEulerExtrapolation
 import logging
 
 logging.basicConfig(level=logging.DEBUG)
@@ -25,7 +25,9 @@ t_max = 1
 x0: NDArray[Any] = np.array([2.0, 0.0])
 
 
-s = SEULEX(ode_fun=x_dot, num_odes=2, jac_fun=None, atol=1e-3, rtol=1e-2, table_size=12)
+s = LimplicitEulerExtrapolation(
+    ode_fun=x_dot, num_odes=2, jac_fun=None, atol=1e-3, rtol=1e-2, table_size=12
+)
 time, result, solve_info = s.solve(x0, t_max, 1e-3)
 
 fig, ax = plt.subplots()

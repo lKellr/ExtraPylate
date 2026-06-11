@@ -8,7 +8,7 @@ def norm_hairer(x: NDArray[np.floating]) -> np.floating:
     return np.sqrt(np.sum(x**2) / x.size)
 
 
-@jit(float64(float64[:]))
+@jit(float64(float64[:]))  # type: ignore
 def norm_hairer_jit(x: np.floating) -> np.floating:
     """jitted function, as norm is a bottleneck, limited to double precision"""
 

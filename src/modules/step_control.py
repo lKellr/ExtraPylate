@@ -555,7 +555,7 @@ class StepControllerExtrapKH_HW(StepControllerExtrap):
         return next_ktarget, next_step_mult
 
 
-class StepControllerExtrapKH_Deuflhard(StepControllerExtrapKH_HW):
+class StepControllerExtrapKH_Deuflhard(StepControllerExtrap):
     """Combined order and step size (k-h) controller for extrapolation methods. Following the strategy by Deulfhard, "Order and Stepsize Control in Extrapolation Methods", 1983.
     The main difference to the strategy in the StepControllerExtrapKH_HW is that its always possible to reduce the order down to k_min, instead of staying in the check window
     """

@@ -144,14 +144,18 @@ def AB2(
         assert x_start.shape == (
             2,
             x0.shape[0],
-        ), "wrong shape of starting values"
+        ), (
+            f"wrong shape of starting values x_start {x_start.shape}, should be {(2, x0.shape[0])}"
+        )
         assert x_start[0] == x0, "first value of x_start must equal x0"
         x[:2] = x_start
         if f_start is not None:
             assert f_start.shape == (
                 1,
                 x0.shape[0],
-            ), "wrong shape of starting values"
+            ), (
+                f"wrong shape of starting values f_start {f_start.shape}, should be {(1, x0.shape[0])}"
+            )
             f_ii = f_start
         else:
             f_ii = ode_fun(t0, x0)
@@ -202,19 +206,23 @@ def AB3(
         assert x_start.shape == (
             3,
             x0.shape[0],
-        ), "wrong shape of starting values"
+        ), (
+            f"wrong shape of starting values x_start {x_start.shape}, should be {(3, x0.shape[0])}"
+        )
         assert x_start[0] == x0, "first value of x_start must equal x0"
         x[:3] = x_start
         if f_start is not None:
             assert f_start.shape == (
                 2,
                 x0.shape[0],
-            ), "wrong shape of starting values"
+            ), (
+                f"wrong shape of starting values f_start {x_start.shape}, should be {(2, x0.shape[0])}"
+            )
             f_ii = f_start[1]
             f_iii = f_start[0]
         else:
-            f_ii = ode_fun(t0 + h, x_start[1])
-            f_iii = ode_fun(t0, x0)
+            f_ii = ode_fun(t[1], x[1])
+            f_iii = ode_fun(t[0], x[0])
 
     for i in range(2, steps):
         f_i = ode_fun(t[i], x[i])
@@ -264,14 +272,18 @@ def PECE(
         assert x_start.shape == (
             3,
             x0.shape[0],
-        ), "wrong shape of starting values"
+        ), (
+            f"wrong shape of starting values x_start {x_start.shape}, should be {(3, x0.shape[0])}"
+        )
         assert x_start[0] == x0, "first value of x_start must equal x0"
         x[:3] = x_start
         if f_start is not None:
             assert f_start.shape == (
                 2,
                 x0.shape[0],
-            ), "wrong shape of starting values"
+            ), (
+                f"wrong shape of starting values f_start {x_start.shape}, should be {(2, x0.shape[0])}"
+            )
             f_i = f_start[1]
             f_ii = f_start[0]
         else:
@@ -332,14 +344,18 @@ def PECE_tol(
         assert x_start.shape == (
             3,
             x0.shape[0],
-        ), "wrong shape of starting values"
+        ), (
+            f"wrong shape of starting values x_start {x_start.shape}, should be {(3, x0.shape[0])}"
+        )
         assert x_start[0] == x0, "first value of x_start must equal x0"
         x[:3] = x_start
         if f_start is not None:
             assert f_start.shape == (
                 2,
                 x0.shape[0],
-            ), "wrong shape of starting values"
+            ), (
+                f"wrong shape of starting values f_start {x_start.shape}, should be {(2, x0.shape[0])}"
+            )
             f_i = f_start[1]
             f_ii = f_start[0]
         else:
@@ -403,14 +419,18 @@ def PEC(
         assert x_start.shape == (
             3,
             x0.shape[0],
-        ), "wrong shape of starting values"
+        ), (
+            f"wrong shape of starting values x_start {x_start.shape}, should be {(3, x0.shape[0])}"
+        )
         assert x_start[0] == x0, "first value of x_start must equal x0"
         x[:3] = x_start
         if f_start is not None:
             assert f_start.shape == (
                 2,
                 x0.shape[0],
-            ), "wrong shape of starting values"
+            ), (
+                f"wrong shape of starting values f_start {x_start.shape}, should be {(2, x0.shape[0])}"
+            )
             f_ii = f_start[1]
             f_iii = f_start[0]
         else:
@@ -447,6 +467,17 @@ def AB_k(
 ) -> tuple[NDArray[np.floating], NDArray[np.floating], dict[str, Any]]:
     """Adams Bashforth of variable order k, maximum implemented is 9"""
     # This funtion is just a wrapper for tehe real one that also returns the function values
+    if x_start is not None:
+        assert x_start.shape == (
+            k,
+            x0.shape[0],
+        ), "wrong shape of starting values"
+        assert x_start[0] == x0, "first value of x_start must equal x0"
+    if f_start is not None:
+        assert f_start.shape == (
+            k - 1,
+            x0.shape[0],
+        ), "wrong shape of starting values"
 
     steps = np.ceil((t_max - t0) / h).astype(int)
     if steps * h / (t_max - t0) - 1.0 > 1e-4:
@@ -458,6 +489,10 @@ def AB_k(
             f"Number of steps {steps} not sufficient to reach target order {k}"
         )
         k = steps
+        if x_start is not None:
+            x_start = x_start[:k]
+        if f_start is not None:
+            f_start = f_start[: k - 1]
 
     t = np.linspace(t0, steps * h, steps + 1, dtype=x0.dtype)
     x, info, _ = _AB_k(
@@ -519,18 +554,9 @@ def _AB_k(
     if k <= 1:
         x[0] = x0
     elif x_start is not None:
-        assert x_start.shape == (
-            k,
-            x0.shape[0],
-        ), "wrong shape of starting values"
-        assert x_start[0] == x0, "first value of x_start must equal x0"
         x[:k] = x_start
         if f_start is not None:
-            assert f_start.shape == (
-                k - 1,
-                x0.shape[0],
-            ), "wrong shape of starting values"
-            f_i[: k - 1] = f_start
+            f_i[: k - 1] = f_start[::-1]
         else:
             for i in range(k - 1):
                 f_i[k - 2 - i] = ode_fun(t0 + i * h, x_start[i])

@@ -128,6 +128,22 @@ def AM_k(
     solvertol: float = 1e-5,
 ) -> tuple[NDArray[np.floating], NDArray[np.floating], dict[str, Any]]:
     """Adams-Moulton formula of variable order k, maximum implemented is 9"""
+    if x_start is not None:
+        assert x_start.shape == (
+            k - 1,
+            x0.shape[0],
+        ), (
+            f"wrong shape of starting values x_start {x_start.shape}, should be {(k - 1, x0.shape[0])}"
+        )
+        assert x_start[0] == x0, "first value of x_start must equal x0"
+    if f_start is not None:
+        assert f_start.shape == (
+            k - 1,
+            x0.shape[0],
+        ), (
+            f"wrong shape of starting values f_start {f_start.shape}, should be {(k - 1, x0.shape[0])}"
+        )
+
     steps = np.ceil((t_max - t0) / h).astype(int)
     if steps * h / (t_max - t0) - 1.0 > 1e-4:
         logger.warning(
@@ -138,6 +154,10 @@ def AM_k(
             f"Number of steps {steps} not sufficient to reach target order {k}"
         )
         k = steps
+        if x_start is not None:
+            x_start = x_start[: k - 1]
+        if f_start is not None:
+            f_start = f_start[: k - 1]
 
     t = np.linspace(t0, steps * h, steps + 1, dtype=x0.dtype)
     x, info, _ = _AM_k(
@@ -235,39 +255,31 @@ def _AM_k(
     # NOTE: i am not sure about the (-1)**j term, it is not given in the Flaherty lecture notes, but results are wrong without it
 
     x = np.zeros((steps + 1, x0.shape[0]), dtype=x0.dtype)
-    f_i = np.empty((k, x0.shape[0]), dtype=x0.dtype)
+    f_i = np.empty((k - 1, x0.shape[0]), dtype=x0.dtype)
 
     if k <= 1:  # start with the trapezoidal rule
         x[0] = x0
         f_i[0] = ode_fun(t0, x0)
     elif x_start is not None:
-        assert x_start.shape == (
-            k - 1,
-            x0.shape[0],
-        ), "wrong shape of starting values"
-        assert x_start[0] == x0, "first value of x_start must equal x0"
         x[: k - 1] = x_start
         if f_start is not None:
-            assert f_start.shape == (
-                k - 1,
-                x0.shape[0],
-            ), "wrong shape of starting values"
-            f_i[: k - 1] = f_start[::-1]
+            f_i = f_start[::-1]
         else:
             for i in range(k - 1):
                 f_i[k - 2 - i] = ode_fun(t0 + i * h, x_start[i])
 
     else:
-        x[: k - 1], inf_starter, f_i[: k - 1] = _AM_k(ode_fun, x0, k - 2, h, k - 1, t0)
+        x[: k - 1], inf_starter, f_i = _AM_k(ode_fun, x0, k - 2, h, k - 1, t0)
         info = inf_starter
 
     steps_starter = k - 2 if k > 1 else 0
     sol_info = dict(eta=np.inf)
     for i in range(steps_starter, steps):
         f_i = np.roll(f_i, 1, axis=0)
+        f_i[0] = ode_fun(t0, x[i])  # TODO: we overwrite one of the specified values
 
         f_const = (
-            x[i] + h * beta[1:] @ f_i[1:] if k > 1 else x[i]
+            x[i] + h * beta @ f_i  # [1:] if k > 1 else x[i]
         )  # precompute the constant part
         x[i + 1], success, sol_info = nl_solver(
             fun=partial(f_imp_Newton, t_i=t0 + (i + 1) * h, f_const=f_const),
@@ -277,7 +289,6 @@ def _AM_k(
             norm=norm_hairer,
             eta_old=sol_info["eta"],
         )
-        f_i[0] = ode_fun(t0 + (i + 1) * h, x[i + 1])
 
         if not success:
             logger.warning("solver did not converge")
@@ -362,7 +373,9 @@ def BDF2(
         assert x_start.shape == (
             2,
             x0.shape[0],
-        ), "wrong shape of starting values"
+        ), (
+            f"wrong shape of starting values x_start {x_start.shape}, should be {(2, x0.shape[0])}"
+        )
         assert x_start[0] == x0, "first value of x_start must equal x0"
         x[:2] = x_start
     else:
@@ -610,7 +623,9 @@ def BDF3(
         assert x_start.shape == (
             3,
             x0.shape[0],
-        ), "wrong shape of starting values"
+        ), (
+            f"wrong shape of starting values x_start {x_start.shape}, should be {(3, x0.shape[0])}"
+        )
         assert x_start[0] == x0, "first value of x_start must equal x0"
         x[:3] = x_start
     else:
