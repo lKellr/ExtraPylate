@@ -75,7 +75,7 @@ class TestConvergence:
         + [
             (AB_k, k, {"k": k}, k, k) for k in range(1, 6)
         ]  # only test until k=5, higher orders are complicated as they do not reach asymptotic order before running into machine precision errors
-        + [(AM_k, k, {"k": k}, k - 1, k - 2) for k in range(1, 6)],
+        + [(AM_k, k, {"k": k, "solvertol": 1e-12}, k - 1, k - 2) for k in range(1, 6)],
     )
     def test_scheme_multistep_sinexp(
         self,
@@ -94,7 +94,7 @@ class TestConvergence:
                     for k in range(
                         1,
                         min(
-                            8, 55 // int(expected_order) - 5
+                            8, 90 // int(expected_order) - 7
                         ),  # min(8, 40 // int(expected_order) - 5)
                     )  # limit N_max for high order schemes, else we reach machine epsilon limits
                 ]
