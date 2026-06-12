@@ -38,158 +38,10 @@ norm = norm_hairer
 N_list = 2 * np.array(
     [
         2 ** (k // 2) if k == 1 or k % 2 == 0 else 1.5 * 2 ** (k // 2)
-        for k in range(1, 12)
+        for k in range(1, 16)
     ]
 )
 conv_data = dict()
-
-errors = list()
-h_mins = list()
-for n_steps in N_list:
-    time, result, solve_info = BDF2(x_dot, x0, t_max, h=t_max / n_steps)
-    errors.append(norm(result[-1] - x_analytic(time[-1])))
-    h_mins.append(t_max / n_steps)
-conv_data["BDF2"] = np.array(errors), np.array(h_mins)
-
-errors = list()
-h_mins = list()
-for n_steps in N_list:
-    time, result, solve_info = BDF3(x_dot, x0, t_max, h=t_max / n_steps)
-    errors.append(norm(result[-1] - x_analytic(time[-1])))
-    h_mins.append(t_max / n_steps)
-conv_data["BDF3"] = np.array(errors), np.array(h_mins)
-
-errors = list()
-h_mins = list()
-for n_steps in N_list:
-    t_start = np.expand_dims(np.linspace(0.0, 2 * t_max / n_steps, 3), 1)
-    x_start = x_analytic(t_start)
-
-    time, result, solve_info = BDF3(
-        x_dot, x0, t_max, h=t_max / n_steps, x_start=x_start
-    )
-    errors.append(norm(result[-1] - x_analytic(time[-1])))
-    h_mins.append(t_max / n_steps)
-conv_data["BDF3started"] = np.array(errors), np.array(h_mins)
-
-
-errors = list()
-h_mins = list()
-for n_steps in N_list:
-    time, result, solve_info = AM_k(x_dot, x0, t_max, h=t_max / n_steps, k=3)
-    errors.append(norm(result[-1] - x_analytic(time[-1])))
-    h_mins.append(t_max / n_steps)
-conv_data["AMk3"] = np.array(errors), np.array(h_mins)
-
-errors = list()
-h_mins = list()
-for n_steps in N_list:
-    time, result, solve_info = AM_k(x_dot, x0, t_max, h=t_max / n_steps, k=5)
-    errors.append(norm(result[-1] - x_analytic(time[-1])))
-    h_mins.append(t_max / n_steps)
-conv_data["AMk5"] = np.array(errors), np.array(h_mins)
-
-errors = list()
-h_mins = list()
-for n_steps in N_list:
-    t_start = np.expand_dims(np.linspace(0.0, 3 * t_max / n_steps, 4), 1)
-    x_start = x_analytic(t_start)
-    f_start = x_dot(t_start[:-1], x_start[:-1])
-
-    time, result, solve_info = AM_k(
-        x_dot, x0, t_max, h=t_max / n_steps, k=5, x_start=x_start, f_start=f_start
-    )
-    errors.append(norm(result[-1] - x_analytic(time[-1])))
-    h_mins.append(t_max / n_steps)
-conv_data["AMk5started"] = np.array(errors), np.array(h_mins)
-
-
-errors = list()
-h_mins = list()
-for n_steps in N_list:
-    time, result, solve_info = AB2(x_dot, x0, t_max, h=t_max / n_steps)
-    errors.append(norm(result[-1] - x_analytic(time[-1])))
-    h_mins.append(t_max / n_steps)
-conv_data["AB2"] = np.array(errors), np.array(h_mins)
-
-errors = list()
-h_mins = list()
-for n_steps in N_list:
-    t_start = np.expand_dims(np.linspace(0.0, t_max / n_steps, 2), 1)
-    x_start = x_analytic(t_start)
-    f_start = x_dot(t_start[:-1], x_start[:-1])
-
-    time, result, solve_info = AB2(
-        x_dot, x0, t_max, h=t_max / n_steps, x_start=x_start, f_start=f_start
-    )
-    errors.append(norm(result[-1] - x_analytic(time[-1])))
-    h_mins.append(t_max / n_steps)
-conv_data["AB2started"] = np.array(errors), np.array(h_mins)
-
-errors = list()
-h_mins = list()
-for n_steps in N_list:
-    time, result, solve_info = AB3(x_dot, x0, t_max, h=t_max / n_steps)
-    errors.append(norm(result[-1] - x_analytic(time[-1])))
-    h_mins.append(t_max / n_steps)
-conv_data["AB3"] = np.array(errors), np.array(h_mins)
-
-errors = list()
-h_mins = list()
-for n_steps in N_list:
-    t_start = np.expand_dims(np.linspace(0.0, 2 * t_max / n_steps, 3), 1)
-    x_start = x_analytic(t_start)
-    f_start = x_dot(t_start[:-1], x_start[:-1])
-
-    time, result, solve_info = AB3(
-        x_dot, x0, t_max, h=t_max / n_steps, x_start=x_start, f_start=f_start
-    )
-    errors.append(norm(result[-1] - x_analytic(time[-1])))
-    h_mins.append(t_max / n_steps)
-conv_data["AB3_started"] = np.array(errors), np.array(h_mins)
-
-errors = list()
-h_mins = list()
-for n_steps in N_list:
-    time, result, solve_info = AB_k(x_dot, x0, t_max, h=t_max / n_steps, k=3)
-    errors.append(norm(result[-1] - x_analytic(time[-1])))
-    h_mins.append(t_max / n_steps)
-conv_data["ABk3"] = np.array(object=errors), np.array(h_mins)
-
-errors = list()
-h_mins = list()
-for n_steps in N_list:
-    t_start = np.expand_dims(np.linspace(0.0, 2 * t_max / n_steps, 3), 1)
-    x_start = x_analytic(t_start)
-    f_start = x_dot(t_start[:-1], x_start[:-1])
-    time, result, solve_info = AB_k(
-        x_dot, x0, t_max, h=t_max / n_steps, k=3, x_start=x_start, f_start=f_start
-    )
-    errors.append(norm(result[-1] - x_analytic(time[-1])))
-    h_mins.append(t_max / n_steps)
-conv_data["ABk3_started"] = np.array(object=errors), np.array(h_mins)
-
-errors = list()
-h_mins = list()
-for n_steps in N_list:
-    time, result, solve_info = AB_k(x_dot, x0, t_max, h=t_max / n_steps, k=7)
-    errors.append(norm(result[-1] - x_analytic(time[-1])))
-    h_mins.append(t_max / n_steps)
-conv_data["ABk7"] = np.array(errors), np.array(h_mins)
-
-errors = list()
-h_mins = list()
-for n_steps in N_list:
-    t_start = np.expand_dims(np.linspace(0.0, 6 * t_max / n_steps, 7), 1)
-    x_start = x_analytic(t_start)
-    f_start = x_dot(t_start[:-1], x_start[:-1])
-    time, result, solve_info = AB_k(
-        x_dot, x0, t_max, h=t_max / n_steps, k=7, x_start=x_start, f_start=f_start
-    )
-    errors.append(norm(result[-1] - x_analytic(time[-1])))
-    h_mins.append(t_max / n_steps)
-conv_data["ABk7_started"] = np.array(errors), np.array(h_mins)
-
 
 errors = list()
 h_mins = list()
@@ -484,7 +336,13 @@ for i, (scheme_name, (errors, _)) in enumerate(conv_data.items()):
         rf"$\bar{{p}} = {np.mean(rate):.2f}$",
     )
     ax.text(t_max / N_list[0], errors[0], f"$p_0 = {rate[0]:.2f}$")
-    ax.text(t_max / N_list[-1], errors[-1], f"$p_\infty = {rate[-1]:.2f}$")
+    ax.text(t_max / N_list[-1], errors[-1], f"$p_\\infty = {rate[-1]:.2f}$")
+    for k in range(len(N_list) - 1):
+        ax.text(
+            t_max / N_list[k],
+            errors[k],
+            f"$p_{k} = {rate[k]:.2f}$\n$N = {N_list[k]}\\to{N_list[k + 1]}$",
+        )
 
 
 plt.legend(frameon=False)
@@ -515,7 +373,7 @@ for i, (scheme_name, (errors, h_min)) in enumerate(conv_data.items()):
         rf"$\bar{{p}} = {np.mean(rate):.2f}$",
     )
     ax.text(h_min[0], errors[0], f"$p_0 = {rate[0]:.2f}$")
-    ax.text(h_min[-1], errors[-1], f"$p_\infty = {rate[-1]:.2f}$")
+    ax.text(h_min[-1], errors[-1], f"$p_\\infty = {rate[-1]:.2f}$")
 
 
 plt.legend(frameon=False)
