@@ -2,11 +2,9 @@ import numpy as np
 from matplotlib import pyplot as plt
 from numpy.typing import NDArray
 
-from modules.step_control import (
-    StepControllerExtrapDummy,
-)
-from solvers.embedded import *
+from modules.step_control import StepControllerExtrapDummy
 from solvers.explicit import *
+from solvers.implicit import *
 from solvers.Extrapolation_Scheme import *
 import logging
 
@@ -37,22 +35,13 @@ def x_analytic(t: float) -> NDArray[np.floating]:
 
 norm = norm_hairer
 
-N_list = 4 * np.array(
+N_list = 2 * np.array(
     [
         2 ** (k // 2) if k == 1 or k % 2 == 0 else 1.5 * 2 ** (k // 2)
-        for k in range(1, 8)
+        for k in range(1, 16)
     ]
 )
-k_list = np.array(range(5))
 conv_data = dict()
-
-errors = list()
-h_mins = list()
-for n_steps in N_list:
-    time, result, solve_info = AB3(x_dot, x0, t_max, h=t_max / n_steps)
-    errors.append(norm(result[-1] - x_analytic(time[-1])))
-    h_mins.append(t_max / n_steps)
-conv_data["AB3"] = np.array(errors), np.array(h_mins)
 
 errors = list()
 h_mins = list()
@@ -322,6 +311,15 @@ ax.set_yscale("log")
 ax.set_xlabel("H")
 ax.set_ylabel("error")
 
+secax = ax.secondary_xaxis(
+    "top",
+    functions=(lambda h: t_max / h, lambda n_steps: t_max / n_steps),
+    xscale="linear",
+)
+secax.set_xlabel("steps")
+# secax.tick_params(axis="x", which="minor")
+
+
 for i, (scheme_name, (errors, _)) in enumerate(conv_data.items()):
     ax.plot(
         t_max / N_list,
@@ -332,13 +330,24 @@ for i, (scheme_name, (errors, _)) in enumerate(conv_data.items()):
         linestyle="--" if scheme_name in ["AB3", "RK4"] else "-",
     )
     rate = np.log(errors[1:] / errors[:-1]) / np.log(N_list[:-1] / N_list[1:])
-    ax.text(t_max / N_list[-1], errors[-1], rf"$\bar{{p}} = {np.mean(rate):.2f}$")
+    ax.text(
+        t_max / N_list[len(N_list) // 2],
+        errors[len(N_list) // 2],
+        rf"$\bar{{p}} = {np.mean(rate):.2f}$",
+    )
     ax.text(t_max / N_list[0], errors[0], f"$p_0 = {rate[0]:.2f}$")
+    ax.text(t_max / N_list[-1], errors[-1], f"$p_\\infty = {rate[-1]:.2f}$")
+    # for k in range(len(N_list) - 1):
+    #     ax.text(
+    #         t_max / N_list[k],
+    #         errors[k],
+    #         f"$p_{k} = {rate[k]:.2f}$\n$N = {N_list[k]}\\to{N_list[k + 1]}$",
+    #     )
 
 
 plt.legend(frameon=False)
 plt.tight_layout()
-plt.savefig("convergence.png")
+# plt.savefig("convergence.png")
 plt.show()
 
 # plot over minimum h
@@ -358,8 +367,13 @@ for i, (scheme_name, (errors, h_min)) in enumerate(conv_data.items()):
         marker="o",
     )
     rate = np.log(errors[1:] / errors[:-1]) / np.log(h_min[1:] / h_min[:-1])
-    ax.text(h_min[-1], errors[-1], rf"$\bar{{p}} = {np.mean(rate):.2f}$")
+    ax.text(
+        h_min[len(h_min) // 2],
+        errors[len(h_min) // 2],
+        rf"$\bar{{p}} = {np.mean(rate):.2f}$",
+    )
     ax.text(h_min[0], errors[0], f"$p_0 = {rate[0]:.2f}$")
+    ax.text(h_min[-1], errors[-1], f"$p_\\infty = {rate[-1]:.2f}$")
 
 
 plt.legend(frameon=False)

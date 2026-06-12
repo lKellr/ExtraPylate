@@ -1,7 +1,11 @@
+import logging
+
 from typing import Any, Callable
 import numpy as np
 from numpy.typing import NDArray
 from scipy.special import comb
+
+logger = logging.getLogger(__name__)
 
 
 def Euler(
@@ -14,7 +18,9 @@ def Euler(
     """Eulers method for numerical solving of ODEs"""
     steps = np.ceil((t_max - t0) / h).astype(int)
     if t0 + steps * h != t_max:
-        print(f"final step not hitting t_max exactly, instead t_max = {steps * h}")
+        logger.warning(
+            f"final step not hitting t_max exactly, instead t_max = {steps * h}"
+        )
 
     info: dict[str, Any] = dict(
         n_feval=0,
@@ -43,7 +49,9 @@ def Midpoint(
     """Explicit Midpoint method for numerical solving of ODEs of the form x_dot=ode_fun(t,x)"""
     steps = np.ceil((t_max - t0) / h).astype(int)
     if steps * h / (t_max - t0) - 1.0 > 1e-4:
-        print(f"final step not hitting t_max exactly, instead t_max = {steps * h}")
+        logger.warning(
+            f"final step not hitting t_max exactly, instead t_max = {steps * h}"
+        )
 
     info: dict[str, Any] = dict(
         n_feval=0,
@@ -76,7 +84,9 @@ def Heun(
     """Heuns method for numerical solving of ODEs of the form x_dot=ode_fun(t,x). THius is equal to SSPRK2"""
     steps = np.ceil((t_max - t0) / h).astype(int)
     if steps * h / (t_max - t0) - 1.0 > 1e-4:
-        print(f"final step not hitting t_max exactly, instead t_max = {steps * h}")
+        logger.warning(
+            f"final step not hitting t_max exactly, instead t_max = {steps * h}"
+        )
 
     info: dict[str, Any] = dict(
         n_feval=0,
@@ -103,11 +113,15 @@ def AB2(
     t_max: float,
     h: float,
     t0: float = 0.0,
+    x_start: NDArray[np.floating] | None = None,
+    f_start: NDArray[np.floating] | None = None,
 ) -> tuple[NDArray[np.floating], NDArray[np.floating], dict[str, Any]]:
     """Adams Bashforth of order 2, started by Midpoint method"""
     steps = np.ceil((t_max - t0) / h).astype(int)
     if steps * h / (t_max - t0) - 1.0 > 1e-4:
-        print(f"final step not hitting t_max exactly, instead t_max = {steps * h}")
+        logger.warning(
+            f"final step not hitting t_max exactly, instead t_max = {steps * h}"
+        )
 
     info: dict[str, Any] = dict(
         n_feval=0,
@@ -118,12 +132,34 @@ def AB2(
 
     t = np.linspace(t0, steps * h, steps + 1, dtype=x0.dtype)
     x = np.zeros((steps + 1, x0.shape[0]), dtype=x0.dtype)
-    _, x[:2], inf_starter = Midpoint(ode_fun, x0, t0 + h, h, t0)
-    info = inf_starter
 
-    f_ii = ode_fun(
-        t[0], x[0]
-    )  # TODO: this has already been evaluated in the starting method
+    if x_start is None:
+        _, x[:2], inf_starter = Midpoint(ode_fun, x0, t0 + h, h, t0)
+        f_ii = ode_fun(
+            t[0], x[0]
+        )  # TODO: this has already been evaluated in the starting method
+
+        info = inf_starter
+    else:
+        assert x_start.shape == (
+            2,
+            x0.shape[0],
+        ), (
+            f"wrong shape of starting values x_start {x_start.shape}, should be {(2, x0.shape[0])}"
+        )
+        assert x_start[0] == x0, "first value of x_start must equal x0"
+        x[:2] = x_start
+        if f_start is not None:
+            assert f_start.shape == (
+                1,
+                x0.shape[0],
+            ), (
+                f"wrong shape of starting values f_start {f_start.shape}, should be {(1, x0.shape[0])}"
+            )
+            f_ii = f_start
+        else:
+            f_ii = ode_fun(t0, x0)
+
     for i in range(1, steps):
         f_i = ode_fun(t[i], x[i])
         x[i + 1] = x[i] + h / 2 * (3 * f_i - f_ii)
@@ -139,11 +175,16 @@ def AB3(
     t_max: float,
     h: float,
     t0: float = 0.0,
+    x_start: NDArray[np.floating] | None = None,
+    f_start: NDArray[np.floating] | None = None,
 ) -> tuple[NDArray[np.floating], NDArray[np.floating], dict[str, Any]]:
     """Adams Bashforth of order 3, first values calculated with Midpoint and AB2"""
     steps = np.ceil((t_max - t0) / h).astype(int)
     if steps * h / (t_max - t0) - 1.0 > 1e-4:
-        print(f"final step not hitting t_max exactly, instead t_max = {steps * h}")
+        logger.warning(
+            f"final step not hitting t_max exactly, instead t_max = {steps * h}"
+        )
+    assert steps >= 2, f"{steps} steps not enough for AB3"
 
     info: dict[str, Any] = dict(
         n_feval=0,
@@ -154,13 +195,35 @@ def AB3(
 
     t = np.linspace(t0, steps * h, steps + 1, dtype=x0.dtype)
     x = np.zeros((steps + 1, x0.shape[0]), dtype=x0.dtype)
-    _, x[:3], inf_starter = AB2(ode_fun, x0, t0 + 2 * h, h, t0)
-    info = inf_starter
 
-    f_ii = ode_fun(
-        t[1], x[1]
-    )  # TODO: this has already been evaluated in the starting method
-    f_iii = ode_fun(t[0], x[0])
+    if x_start is None:
+        _, x[:3], inf_starter = AB2(ode_fun, x0, t0 + 2 * h, h, t0)
+        info = inf_starter
+        f_ii = ode_fun(
+            t[1], x[1]
+        )  # TODO: this has already been evaluated in the starting method
+        f_iii = ode_fun(t[0], x[0])
+    else:
+        assert x_start.shape == (
+            3,
+            x0.shape[0],
+        ), (
+            f"wrong shape of starting values x_start {x_start.shape}, should be {(3, x0.shape[0])}"
+        )
+        assert x_start[0] == x0, "first value of x_start must equal x0"
+        x[:3] = x_start
+        if f_start is not None:
+            assert f_start.shape == (
+                2,
+                x0.shape[0],
+            ), (
+                f"wrong shape of starting values f_start {x_start.shape}, should be {(2, x0.shape[0])}"
+            )
+            f_ii = f_start[1]
+            f_iii = f_start[0]
+        else:
+            f_ii = ode_fun(t[1], x[1])
+            f_iii = ode_fun(t[0], x[0])
 
     for i in range(2, steps):
         f_i = ode_fun(t[i], x[i])
@@ -179,11 +242,15 @@ def PECE(
     h: float,
     n_rep: int = 1,
     t0: float = 0.0,
+    x_start: NDArray[np.floating] | None = None,
+    f_start: NDArray[np.floating] | None = None,
 ) -> tuple[NDArray[np.floating], NDArray[np.floating], dict[str, Any]]:
     """PECE Method using AB3, AM4, starting with Midpoint and AB2"""
     steps = np.ceil((t_max - t0) / h).astype(int)
     if steps * h / (t_max - t0) - 1.0 > 1e-4:
-        print(f"final step not hitting t_max exactly, instead t_max = {steps * h}")
+        logger.warning(
+            f"final step not hitting t_max exactly, instead t_max = {steps * h}"
+        )
 
     info: dict[str, Any] = dict(
         n_feval=0,
@@ -194,13 +261,36 @@ def PECE(
 
     t = np.linspace(t0, steps * h, steps + 1, dtype=x0.dtype)
     x = np.zeros((steps + 1, x0.shape[0]), dtype=x0.dtype)
-    _, x[:3], inf_starter = AB2(ode_fun, x0, t0 + 2 * h, h, t0)
-    info = inf_starter
+    if x_start is None:
+        _, x[:3], inf_starter = AB2(ode_fun, x0, t0 + 2 * h, h, t0)
+        info = inf_starter
+        f_i = ode_fun(
+            t[1], x[1]
+        )  # TODO: this has already been evaluated in the starting method
+        f_ii = ode_fun(t[0], x[0])
 
-    f_i = ode_fun(
-        t[1], x[1]
-    )  # TODO: this has already been evaluated in the starting method
-    f_ii = ode_fun(t[0], x[0])
+    else:
+        assert x_start.shape == (
+            3,
+            x0.shape[0],
+        ), (
+            f"wrong shape of starting values x_start {x_start.shape}, should be {(3, x0.shape[0])}"
+        )
+        assert x_start[0] == x0, "first value of x_start must equal x0"
+        x[:3] = x_start
+        if f_start is not None:
+            assert f_start.shape == (
+                2,
+                x0.shape[0],
+            ), (
+                f"wrong shape of starting values f_start {x_start.shape}, should be {(2, x0.shape[0])}"
+            )
+            f_i = f_start[1]
+            f_ii = f_start[0]
+        else:
+            f_i = ode_fun(t0 + h, x_start[1])
+            f_ii = ode_fun(t0, x0)
+
     for i in range(2, steps):
         f_iii = f_ii
         f_ii = f_i
@@ -225,11 +315,15 @@ def PECE_tol(
     h: float,
     tol: float = 1e-4,
     t0: float = 0.0,
+    x_start: NDArray[np.floating] | None = None,
+    f_start: NDArray[np.floating] | None = None,
 ) -> tuple[NDArray[np.floating], NDArray[np.floating], dict[str, Any]]:
     """PECE Method using AB3, AM4, starting with Midpoint and AB2, iterates until convergence with tolerance tol is met"""
     steps = np.ceil((t_max - t0) / h).astype(int)
     if steps * h / (t_max - t0) - 1.0 > 1e-4:
-        print(f"final step not hitting t_max exactly, instead t_max = {steps * h}")
+        logger.warning(
+            f"final step not hitting t_max exactly, instead t_max = {steps * h}"
+        )
 
     info: dict[str, Any] = dict(
         n_feval=0,
@@ -240,13 +334,35 @@ def PECE_tol(
 
     t = np.linspace(t0, steps * h, steps + 1, dtype=x0.dtype)
     x = np.zeros((steps + 1, x0.shape[0]), dtype=x0.dtype)
-    _, x[:3], inf_starter = AB2(ode_fun, x0, t0 + 2 * h, h, t0)
-    info = inf_starter
+    if x_start is None:
+        _, x[:3], inf_starter = AB2(ode_fun, x0, t0 + 2 * h, h, t0)
+        info = inf_starter
+        f_i: NDArray[np.floating] = ode_fun(
+            t[1], x[1]
+        )  # TODO: this has already been evaluated in the starting method
+        f_ii: NDArray[np.floating] = ode_fun(t[0], x[0])
+    else:
+        assert x_start.shape == (
+            3,
+            x0.shape[0],
+        ), (
+            f"wrong shape of starting values x_start {x_start.shape}, should be {(3, x0.shape[0])}"
+        )
+        assert x_start[0] == x0, "first value of x_start must equal x0"
+        x[:3] = x_start
+        if f_start is not None:
+            assert f_start.shape == (
+                2,
+                x0.shape[0],
+            ), (
+                f"wrong shape of starting values f_start {x_start.shape}, should be {(2, x0.shape[0])}"
+            )
+            f_i = f_start[1]
+            f_ii = f_start[0]
+        else:
+            f_i = ode_fun(t0 + h, x_start[1])
+            f_ii = ode_fun(t0, x0)
 
-    f_i = ode_fun(
-        t[1], x[1]
-    )  # TODO: this has already been evaluated in the starting method
-    f_ii = ode_fun(t[0], x[0])
     for i in range(2, steps):
         f_iii = f_ii
         f_ii = f_i
@@ -276,11 +392,15 @@ def PEC(
     h: float,
     n_rep: int = 1,
     t0: float = 0.0,
+    x_start: NDArray[np.floating] | None = None,
+    f_start: NDArray[np.floating] | None = None,
 ) -> tuple[NDArray[np.floating], NDArray[np.floating], dict[str, Any]]:
     """PEC Method using AB3, AM4, starting with Midpoint and AB2"""
     steps = np.ceil((t_max - t0) / h).astype(int)
     if steps * h / (t_max - t0) - 1.0 > 1e-4:
-        print(f"final step not hitting t_max exactly, instead t_max = {steps * h}")
+        logger.warning(
+            f"final step not hitting t_max exactly, instead t_max = {steps * h}"
+        )
 
     info: dict[str, Any] = dict(
         n_feval=0,
@@ -291,14 +411,35 @@ def PEC(
 
     t = np.linspace(t0, steps * h, steps + 1, dtype=x0.dtype)
     x = np.zeros((steps + 1, x0.shape[0]), dtype=x0.dtype)
-    _, x[:3], inf_starter = AB2(ode_fun, x0, t0 + 2 * h, h, t0)
-    info = inf_starter
+    if x_start is None:
+        _, x[:3], inf_starter = AB2(ode_fun, x0, t0 + 2 * h, h, t0)
+        info = inf_starter
+        f_ii = ode_fun(t[1], x[1])
+        f_iii = ode_fun(t[0], x[0])
+    else:
+        assert x_start.shape == (
+            3,
+            x0.shape[0],
+        ), (
+            f"wrong shape of starting values x_start {x_start.shape}, should be {(3, x0.shape[0])}"
+        )
+        assert x_start[0] == x0, "first value of x_start must equal x0"
+        x[:3] = x_start
+        if f_start is not None:
+            assert f_start.shape == (
+                2,
+                x0.shape[0],
+            ), (
+                f"wrong shape of starting values f_start {x_start.shape}, should be {(2, x0.shape[0])}"
+            )
+            f_ii = f_start[1]
+            f_iii = f_start[0]
+        else:
+            f_ii = ode_fun(t0 + h, x_start[1])
+            f_iii = ode_fun(t0, x0)
 
-    f_i = ode_fun(
-        t[2], x[2]
-    )  # TODO: this has already been evaluated in the starting method
-    f_ii = ode_fun(t[1], x[1])
-    f_iii = ode_fun(t[0], x[0])
+    f_i = ode_fun(t[2], x[2])
+
     for i in range(2, steps):
         x[i + 1] = x[i] + h / 12 * (
             23 * f_i - 16 * f_ii + 5 * f_iii
@@ -322,16 +463,49 @@ def AB_k(
     h: float,
     k: int,
     t0: float = 0.0,
+    x_start: NDArray[np.floating] | None = None,
+    f_start: NDArray[np.floating] | None = None,
 ) -> tuple[NDArray[np.floating], NDArray[np.floating], dict[str, Any]]:
     """Adams Bashforth of variable order k, maximum implemented is 9"""
     # This funtion is just a wrapper for tehe real one that also returns the function values
+    if x_start is not None:
+        assert x_start.shape == (
+            k,
+            x0.shape[0],
+        ), "wrong shape of starting values"
+        assert x_start[0] == x0, "first value of x_start must equal x0"
+    if f_start is not None:
+        assert f_start.shape == (
+            k - 1,
+            x0.shape[0],
+        ), "wrong shape of starting values"
 
     steps = np.ceil((t_max - t0) / h).astype(int)
     if steps * h / (t_max - t0) - 1.0 > 1e-4:
-        print(f"final step not hitting t_max exactly, instead t_max = {steps * h}")
+        logger.warning(
+            f"final step not hitting t_max exactly, instead t_max = {steps * h}"
+        )
+    if steps + 1 < k:
+        logger.warning(
+            f"Number of steps {steps} not sufficient to reach target order {k}"
+        )
+        k = steps
+        if x_start is not None:
+            x_start = x_start[:k]
+        if f_start is not None:
+            f_start = f_start[: k - 1]
 
     t = np.linspace(t0, steps * h, steps + 1, dtype=x0.dtype)
-    x, info, f_values = _AB_k(ode_fun=ode_fun, x0=x0, steps=steps, h=h, k=k, t0=t0)
+    x, info, _ = _AB_k(
+        ode_fun=ode_fun,
+        x0=x0,
+        steps=steps,
+        h=h,
+        k=k,
+        t0=t0,
+        x_start=x_start,
+        f_start=f_start,
+    )
     return t, x, info
 
 
@@ -342,6 +516,8 @@ def _AB_k(
     h: float,
     k: int,
     t0: float = 0.0,
+    x_start: NDArray[np.floating] | None = None,
+    f_start: NDArray[np.floating] | None = None,
 ) -> tuple[NDArray[np.floating], dict[str, Any], NDArray[np.floating]]:
     """Adams Bashforth of variable order k, this function also returns the computed function values"""
     assert k <= 9, "highest implemented order is 9"
@@ -372,15 +548,22 @@ def _AB_k(
             for j in range(1, k + 1)
         ]
     )
-    # TODO: i am not sure about the (-1)**j term, it is not given in my ource, but results are wrong without it
+    # NOTE: i am not sure about the (-1)**j term, it is not given in the Flaherty lecture notes, but results are wrong without it
 
     x = np.zeros((steps + 1, x0.shape[0]), dtype=x0.dtype)
     f_i = np.empty((k, x0.shape[0]), dtype=x0.dtype)
-    if k > 1:
+    if k <= 1:
+        x[0] = x0
+    elif x_start is not None:
+        x[:k] = x_start
+        if f_start is not None:
+            f_i[: k - 1] = f_start[::-1]
+        else:
+            for i in range(k - 1):
+                f_i[k - 2 - i] = ode_fun(t0 + i * h, x_start[i])
+    else:
         x[:k], inf_starter, f_i[: k - 1] = _AB_k(ode_fun, x0, k - 1, h, k - 1, t0)
         info = inf_starter
-    else:
-        x[0] = x0
 
     for i in range(k - 1, steps):
         f_i = np.roll(f_i, 1, axis=0)
@@ -401,7 +584,9 @@ def RK4(
     """Classical Runge-Kutta Method, order 4"""
     steps = np.ceil((t_max - t0) / h).astype(int)
     if steps * h / (t_max - t0) - 1.0 > 1e-4:
-        print(f"final step not hitting t_max exactly, instead t_max = {steps * h}")
+        logger.warning(
+            f"final step not hitting t_max exactly, instead t_max = {steps * h}"
+        )
 
     info: dict[str, Any] = dict(
         n_feval=0,
@@ -435,7 +620,9 @@ def SSPRK3(
     """Strong stability preserving RK method of order 3, cfl_max <=1"""
     steps = np.ceil((t_max - t0) / h).astype(int)
     if steps * h / (t_max - t0) - 1.0 > 1e-4:
-        print(f"final step not hitting t_max exactly, instead t_max = {steps * h}")
+        logger.warning(
+            f"final step not hitting t_max exactly, instead t_max = {steps * h}"
+        )
 
     info: dict[str, Any] = dict(
         n_feval=0,
@@ -467,7 +654,9 @@ def SSPRK34(
     """Four stage strong stability preserving RK method of order 3, cfl_max <=2"""
     steps = np.ceil((t_max - t0) / h).astype(int)
     if steps * h / (t_max - t0) - 1.0 > 1e-4:
-        print(f"final step not hitting t_max exactly, instead t_max = {steps * h}")
+        logger.warning(
+            f"final step not hitting t_max exactly, instead t_max = {steps * h}"
+        )
 
     info: dict[str, Any] = dict(
         n_feval=0,

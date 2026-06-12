@@ -3,7 +3,7 @@ from typing import Any
 import numpy as np
 from matplotlib import pyplot as plt
 from solvers.simple_explicit import *
-from solvers.Extrapolation_Scheme import SEULEX
+from solvers.Extrapolation_Scheme import LimplicitEulerExtrapolation
 import logging
 from numpy.typing import NDArray
 
@@ -29,7 +29,9 @@ def x_dot(t: float, x: NDArray[np.floating]) -> NDArray[np.floating]:
 t_max = 40.0  # interesting solutions for t_max ~ 1e11
 x0 = np.array([1.0, 0.0, 0.0])
 
-s = SEULEX(ode_fun=x_dot, num_odes=2, jac_fun=None, atol=1e-3, rtol=1e-2, table_size=12)
+s = LimplicitEulerExtrapolation(
+    ode_fun=x_dot, num_odes=2, jac_fun=None, atol=1e-3, rtol=1e-2, table_size=12
+)
 time, result, solve_info = s.solve(x0, t_max, 1e-3)
 
 fig, ax = plt.subplots()
