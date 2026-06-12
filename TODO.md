@@ -7,7 +7,7 @@
 - Deuflhard control correctly with information theory, storing which errors fail how often
 - PI control
 - Shampine SIMP control
-- monitor growth of basic:scheme solutions? Early versions of METAN1
+- monitor growth of basic_scheme solutions? Early versions of METAN1
 
 - find good default values for implicit_rel_costs (will depend on the equation, maybe even provide a function to find it automatically?)
 

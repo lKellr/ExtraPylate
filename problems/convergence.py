@@ -337,12 +337,12 @@ for i, (scheme_name, (errors, _)) in enumerate(conv_data.items()):
     )
     ax.text(t_max / N_list[0], errors[0], f"$p_0 = {rate[0]:.2f}$")
     ax.text(t_max / N_list[-1], errors[-1], f"$p_\\infty = {rate[-1]:.2f}$")
-    for k in range(len(N_list) - 1):
-        ax.text(
-            t_max / N_list[k],
-            errors[k],
-            f"$p_{k} = {rate[k]:.2f}$\n$N = {N_list[k]}\\to{N_list[k + 1]}$",
-        )
+    # for k in range(len(N_list) - 1):
+    #     ax.text(
+    #         t_max / N_list[k],
+    #         errors[k],
+    #         f"$p_{k} = {rate[k]:.2f}$\n$N = {N_list[k]}\\to{N_list[k + 1]}$",
+    #     )
 
 
 plt.legend(frameon=False)

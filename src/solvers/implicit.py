@@ -13,8 +13,6 @@ from modules.root_finding import NewtonODE
 
 logger = logging.getLogger(__name__)
 
-logger = logging.getLogger(__name__)
-
 
 def Backwards_Euler(
     ode_fun: Callable[[float, NDArray[np.floating]], NDArray[np.floating]],
