@@ -267,7 +267,7 @@ def _AM_k(
     elif x_start is not None:
         x[: k - 1] = x_start
         if f_start is not None:
-            f_i = f_start[::-1]
+            f_i[:-1] = f_start[::-1]
         else:
             for i in range(k - 2):
                 f_i[k - 3 - i] = ode_fun(t0 + i * h, x_start[i])
@@ -279,8 +279,9 @@ def _AM_k(
     steps_starter = k - 2 if k > 1 else 0
     sol_info = dict(eta=np.inf)
     for i in range(steps_starter, steps):
-        f_i = np.roll(f_i, 1, axis=0)
-        f_i[0] = ode_fun(t0 + i * h, x[i])
+        if k > 1:  # required to support BW-Euler
+            f_i = np.roll(f_i, 1, axis=0)
+            f_i[0] = ode_fun(t0 + i * h, x[i])
 
         f_const = (
             x[i] + h * beta[1:] @ f_i  # [1:] if k > 1 else x[i]
