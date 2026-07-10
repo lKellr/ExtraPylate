@@ -1,3 +1,4 @@
+from functools import partial
 from typing import Any
 
 import numpy as np
@@ -59,12 +60,14 @@ def benchmark_solver_controlled(ode_problem: dict, solver_runfunc, precision_lis
     run_results_list = []
 
     for prec in precision_list:
-        solver_run_kwargs = dict(atol=prec, rtol=prec * 1e2)
+        solver_run_kwargs = dict(atol=prec, rtol=prec)
         run_results = run_problem(ode_problem, solver_runfunc, solver_run_kwargs)
 
         run_results_list.append(run_results)
 
-        if run_results[1] > 1e2 or run_results[0] > 1.0:
+        if (
+            run_results[1] > 1e1 or run_results[0] > 1.0
+        ):  # finish for divergence or long times
             break
     dat_solver = pd.DataFrame(
         run_results_list, columns=["errors", "timings", "f_evals"]
@@ -89,7 +92,9 @@ def benchmark_solver_stepsize(
         h_last = h_prec
         error_last = run_results[0]
 
-        if run_results[1] > 1e2 or error_last > 1.0:
+        if (
+            run_results[1] > 1e1 or error_last > 1.0
+        ):  # finish for divergence or long times
             break
 
     dat_solver = pd.DataFrame(
@@ -122,13 +127,29 @@ norm = norm_hairer
 data = dict()
 
 data["Euler"] = benchmark_solver_stepsize(
-    ode_problem, Euler, precision_list, p_expected=1.0, h_initial=1e-2
+    ode_problem, Euler, precision_list[:3], p_expected=1.0, h_initial=1e-2
+)
+data["Heun"] = benchmark_solver_stepsize(
+    ode_problem, Heun, precision_list[:4], p_expected=1.0, h_initial=1e-1
+)
+data["AB_5"] = benchmark_solver_stepsize(
+    ode_problem,
+    partial(AB_k, k=5),
+    precision_list[1:],
+    p_expected=1.0,
+    h_initial=1e-2,  # this diverges for low precision / too large step sizes
+)
+data["SSPRK3"] = benchmark_solver_stepsize(
+    ode_problem, SSPRK3, precision_list[:5], p_expected=1.0, h_initial=1e-1
 )
 data["DP54"] = benchmark_solver_controlled(ode_problem, DP54, precision_list)
+data["RKX4"] = benchmark_solver_controlled(ode_problem, RKX4, precision_list)
 data["EULEX"] = benchmark_solver_controlled(
     ode_problem, get_run_extrap(EulerExtrapolation), precision_list
 )
-
+data["ODEX"] = benchmark_solver_controlled(
+    ode_problem, get_run_extrap(ModMidpointExtrapolation), precision_list
+)
 
 #  efficiency
 fig, ax = plt.subplots()
@@ -137,6 +158,7 @@ ax.set_title("Work-Precision")
 ax.set_xlabel("function evaluations")
 ax.set_ylabel("error")
 ax.set_yscale("log")
+ax.set_xlim(0, 2e3)
 
 for i, (scheme_name, dat_solver) in enumerate(data.items()):
     ax.plot(
@@ -147,19 +169,39 @@ for i, (scheme_name, dat_solver) in enumerate(data.items()):
         color=cmap(i),
     )
 ax.legend(frameon=False)
+fig.savefig("work_precision.png")
 plt.tight_layout()
 plt.show()
 
-
-ax.set_title("Work-Precision")
+fig, ax = plt.subplots()
+ax.set_title("Time-Precision")
 ax.set_xlabel("time")
 ax.set_ylabel("error")
 ax.set_yscale("log")
+ax.set_xlim(0, 1.0)
 
 for i, (scheme_name, dat_solver) in enumerate(data.items()):
     ax.plot(
         dat_solver["timings"],
         dat_solver["errors"],
+        label=scheme_name,
+        marker="o",
+        color=cmap(i),
+    )
+ax.legend(frameon=False)
+plt.tight_layout()
+plt.show()
+
+
+fig, ax = plt.subplots()
+ax.set_title("Work-Time")
+ax.set_xlabel("f_evals")
+ax.set_ylabel("time")
+
+for i, (scheme_name, dat_solver) in enumerate(data.items()):
+    ax.plot(
+        dat_solver["f_evals"],
+        dat_solver["timings"],
         label=scheme_name,
         marker="o",
         color=cmap(i),
