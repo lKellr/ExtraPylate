@@ -5,6 +5,7 @@ import numpy as np
 from matplotlib import pyplot as plt
 from numpy.typing import NDArray
 import pandas as pd
+from scipy.integrate import solve_ivp
 
 from modules.helpers import norm_hairer
 from modules.step_control import (
@@ -28,6 +29,7 @@ logger_pil.setLevel(logging.INFO)
 
 cmap = plt.get_cmap("tab20")
 
+
 def get_run_extrap(extrap_scheme):
     def run_extrap(ode_fun, x0, t_max, atol, rtol):
         solver_extrap = extrap_scheme(
@@ -38,6 +40,25 @@ def get_run_extrap(extrap_scheme):
         return solver_extrap.solve(x0, t_max)
 
     return run_extrap
+
+
+def get_run_scipy(scheme_name):
+    def run_sp(ode_fun, x0, t_max, atol, rtol):
+        sol = solve_ivp(ode_fun, (0.0, t_max), x0, scheme_name, atol=atol, rtol=rtol)
+        return (
+            sol.t,
+            sol.y.T,
+            dict(
+                n_feval=sol.nfev,
+                n_jaceval=sol.njev,
+                n_lu=sol.nlu,
+                n_restarts=0,
+                local_errors=[],
+            ),
+        )
+
+    return run_sp
+
 
 def run_problem(ode_problem: dict, solver_runfunc, solver_run_kwargs=dict()):
     t_start = perf_counter()
@@ -110,8 +131,11 @@ def x_dot_logproblem(t: float, x: NDArray[np.floating]) -> NDArray[np.floating]:
             -2 * t * x[1] * np.log(np.maximum(x[0], 1e-3)),
         ]
     )
+
+
 def x_analytic_logproblem(t: float) -> NDArray[np.floating]:
     return np.array([np.exp(np.sin(t * t)), np.exp(np.cos(t * t))]).T
+
 
 ode_problem = dict(
     x_dot=x_dot_logproblem,
@@ -120,7 +144,7 @@ ode_problem = dict(
     x_analytic=x_analytic_logproblem,
 )
 
-precision_list = [1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9]
+precision_list = [1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9, 1e-10]
 solver_list = [DP54]
 norm = norm_hairer
 
@@ -130,17 +154,17 @@ data["Euler"] = benchmark_solver_stepsize(
     ode_problem, Euler, precision_list[:3], p_expected=1.0, h_initial=1e-2
 )
 data["Heun"] = benchmark_solver_stepsize(
-    ode_problem, Heun, precision_list[:4], p_expected=1.0, h_initial=1e-1
+    ode_problem, Heun, precision_list[:4], p_expected=2.0, h_initial=1e-1
 )
 data["AB_5"] = benchmark_solver_stepsize(
     ode_problem,
     partial(AB_k, k=5),
     precision_list[1:],
-    p_expected=1.0,
+    p_expected=5.0,
     h_initial=1e-2,  # this diverges for low precision / too large step sizes
 )
 data["SSPRK3"] = benchmark_solver_stepsize(
-    ode_problem, SSPRK3, precision_list[:5], p_expected=1.0, h_initial=1e-1
+    ode_problem, SSPRK3, precision_list[:4], p_expected=3.0, h_initial=1e-1
 )
 data["DP54"] = benchmark_solver_controlled(ode_problem, DP54, precision_list)
 data["RKX4"] = benchmark_solver_controlled(ode_problem, RKX4, precision_list)
@@ -149,6 +173,12 @@ data["EULEX"] = benchmark_solver_controlled(
 )
 data["ODEX"] = benchmark_solver_controlled(
     ode_problem, get_run_extrap(ModMidpointExtrapolation), precision_list
+)
+data["SP_RK45"] = benchmark_solver_controlled(
+    ode_problem, get_run_scipy("RK45"), precision_list
+)
+data["SP_DOP853"] = benchmark_solver_controlled(
+    ode_problem, get_run_scipy("DOP853"), precision_list
 )
 
 #  efficiency
@@ -169,7 +199,7 @@ for i, (scheme_name, dat_solver) in enumerate(data.items()):
         color=cmap(i),
     )
 ax.legend(frameon=False)
-fig.savefig("work_precision.png")
+# fig.savefig("work_precision.png")
 plt.tight_layout()
 plt.show()
 
