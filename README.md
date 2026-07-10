@@ -17,8 +17,22 @@ Some test problems are supplied. Additionally, there are so scripts to evaluate 
 
 # Examples
 ## work-precision graphs
-![work-precision-explicit](work_precision.png)
-_currently only single point values, no graphs_
+benchmark problem:
+$$
+\begin{aligned}
+  \dot{x}_0 &= 2 t  x_0 \log(\max(x_1, 1e-3))\\
+  \dot{x}_1 &=-2 t  x_1 \log(\max(x_0, 1e-3))
+\end{aligned}
+$$
+with $x(t=0) = (1, e)$, $t_\mathrm{max} = 5$
+
+![work-precision-explicit](work_precision_expl_single.png.png)
+_single-points for explicit schemes_
+
+![work-precision](work_precision.png)
+_work precision graph for benchmark problem_
+
+The superiority of the adaptive schemes becomes very clear. It is also visible that ODEX is quite competitive with the Dormand-Prince method, even more for at high precision requirements. EULEX on the other hand exhibits a lower efficiency, even worse than the extrapolated RK scheme.
 
 ## N-body problem simulation
 ![N-body](N-body.gif)
@@ -72,13 +86,13 @@ _In the same case, ODEX (which is slightly faster than DP54) has much better ene
 
 # Zhabotinsky-Belousov reaction / Oregonator
 $$
-\begin{align}
+\begin{aligned}
 \begin{split}
   \dot{x}_0 &= s (x_1 - x_1 x_0 - q x_0) \\
   \dot{x}_1  &= 1 / s (-x_1 - x_1 x_0 + f x_2)\\
   \dot{x}_2 &=w (x_0 - x_2) \\
 \end{split}
-\end{align}
+\end{aligned}
 $$
 with $s = 7.27$, $q=8.375 \cdot 10^{-6}$, $f=1$, and $w=0.161$.
 

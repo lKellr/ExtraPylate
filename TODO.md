@@ -21,3 +21,4 @@
 # Notes
 - AB convergence rate is not better than starter order (Euler or Midpoint)
 - ODEX use order 2*(k+1) with even step sequences
+- DP54 has a worse relationship between work and timings than extrapolation schemes, I expected the inverse due to overhead in extrapolation solvers. Somehow the timing of ODEX is not very strongly dependent on the precision requirements (at least for the tested problem and precisions)
