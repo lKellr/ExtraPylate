@@ -1,8 +1,42 @@
-from typing import Callable
+from typing import Callable, NamedTuple
 import numpy as np
 from numpy.typing import NDArray
+from scipy.integrate import solve_ivp
 from solvers.embedded import DP54
 from modules.helpers import norm_hairer
+
+class ODEProblem(NamedTuple):
+    x_dot: Callable[[float, NDArray[np.floating]], NDArray[np.floating]]
+    t_range: tuple[int, int]
+    x0: NDArray[np.floating]
+    x_analytic: Callable[[float], NDArray[np.floating]] | None = None
+
+    @classmethod
+    def with_numerical_reference_solution(
+        cls,
+        x_dot: Callable[[float, NDArray[np.floating]], NDArray[np.floating]],
+        t_range: tuple[int, int],
+        x0: NDArray[np.floating],
+        atol: float = 1e-9,
+        rtol: float = 1e-6,
+        scheme_name: str = "DOP853",
+    ):
+        cls_no_ref = cls(
+            x_dot,
+            t_range,
+            x0,
+        )
+        return cls(
+            x_dot,
+            t_range,
+            x0,
+            create_reference_solution(
+                cls_no_ref,
+                atol,
+                rtol,
+                scheme_name,
+            ),
+        )
 
 
 def find_local_errors(
@@ -26,3 +60,33 @@ def find_local_errors(
         )
         err_loc[ix_time + 1] = norm(x_computed[ix_time + 1] - x_analytic[-1])
     return err_loc
+
+def create_reference_solution(
+    ode_problem: ODEProblem,
+    atol: float = 1e-9,
+    rtol: float = 1e-6,
+    scheme_name: str = "DOP853",
+) -> Callable[[float], NDArray[np.floating]]:
+    solve_result = solve_ivp(
+        ode_problem.x_dot,
+        ode_problem.t_range,
+        ode_problem.x0,
+        scheme_name,
+        atol=atol,
+        rtol=rtol,
+        dense_output=True,
+    )
+
+    if not solve_result.success:
+        print(f"Creation of reference solution failed tue to {solve_result.message}")
+
+    # t_high = sol.t
+    # x_high = sol.y.T
+
+    def x_ref(t: float) -> Callable[[float], NDArray[np.floating]]:
+        # return np.array(
+        #     [np.interp(t, t_high, x_high[:, i]) for i in range(ode_problem.x0.size)]
+        # ).T
+        return solve_result.sol(t).T  # transpose result from dense interpolant
+
+    return x_ref

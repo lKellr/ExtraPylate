@@ -8,6 +8,7 @@ import pandas as pd
 from scipy.integrate import solve_ivp
 
 from modules.helpers import norm_hairer
+from modules.post_processing import ODEProblem
 from modules.step_control import (
     StepControllerExtrapBulirsch,
     StepControllerExtrapK,
@@ -44,7 +45,14 @@ def get_run_extrap(extrap_scheme):
 
 def get_run_scipy(scheme_name):
     def run_sp(ode_fun, x0, t_max, atol, rtol):
-        sol = solve_ivp(ode_fun, (0.0, t_max), x0, scheme_name, atol=atol, rtol=rtol)
+        sol = solve_ivp(
+            fun=ode_fun,
+            t_span=(0.0, t_max),
+            y0=x0,
+            method=scheme_name,
+            atol=atol,
+            rtol=rtol,
+        )
         return (
             sol.t,
             sol.y.T,
@@ -60,24 +68,26 @@ def get_run_scipy(scheme_name):
     return run_sp
 
 
-def run_problem(ode_problem: dict, solver_runfunc, solver_run_kwargs=dict()):
+def run_problem(ode_problem: ODEProblem, solver_runfunc, solver_run_kwargs=dict()):
     t_start = perf_counter()
     time, solution, solve_info = solver_runfunc(
-        ode_fun=ode_problem["x_dot"],
-        x0=ode_problem["x0"],
-        t_max=ode_problem["t_max"],
+        ode_fun=ode_problem.x_dot,
+        x0=ode_problem.x0,
+        t_max=ode_problem.t_range[1],
         **solver_run_kwargs,
     )
     time_elapsed = perf_counter() - t_start
 
     error = norm(
-        solution - ode_problem["x_analytic"](time)
+        solution - ode_problem.x_analytic(time)
     )  # error over whole integration
 
     return error, time_elapsed, solve_info["n_feval"]
 
 
-def benchmark_solver_controlled(ode_problem: dict, solver_runfunc, precision_list):
+def benchmark_solver_controlled(
+    ode_problem: ODEProblem, solver_runfunc, precision_list
+):
     run_results_list = []
 
     for prec in precision_list:
@@ -97,7 +107,7 @@ def benchmark_solver_controlled(ode_problem: dict, solver_runfunc, precision_lis
 
 
 def benchmark_solver_stepsize(
-    ode_problem: dict, solver_runfunc, precision_list, p_expected, h_initial=0.1
+    ode_problem: ODEProblem, solver_runfunc, precision_list, p_expected, h_initial=0.1
 ):
     h_last = h_initial  # initial h
     error_last = precision_list[0]  # disable reduction by p for first estimate
@@ -123,7 +133,7 @@ def benchmark_solver_stepsize(
     )
     return dat_solver
 
-
+# benchmark problem / log problem
 def x_dot_logproblem(t: float, x: NDArray[np.floating]) -> NDArray[np.floating]:
     return np.array(
         [
@@ -136,12 +146,34 @@ def x_dot_logproblem(t: float, x: NDArray[np.floating]) -> NDArray[np.floating]:
 def x_analytic_logproblem(t: float) -> NDArray[np.floating]:
     return np.array([np.exp(np.sin(t * t)), np.exp(np.cos(t * t))]).T
 
+## Duffing oscillator
+alpha = -1.0
+beta = 1.0
+gamma = 3.0
+delta = 0.02
+omega = 1.0
 
-ode_problem = dict(
-    x_dot=x_dot_logproblem,
-    t_max=5.0,
-    x0=np.array([1.0, np.e]),
-    x_analytic=x_analytic_logproblem,
+
+def x_dot_Duffing(t: float, x: NDArray[np.floating]) -> NDArray[np.floating]:
+    return np.array(
+        [
+            x[1],
+            gamma * np.cos(omega * t)
+            - (delta * x[1] + alpha * x[0] + beta * x[0] ** 3),
+        ]
+    )
+
+
+# ode_problem = ODEProblem(
+#     x_dot=x_dot_logproblem,
+#     t_range=(0,5.0),
+#     x0=np.array([1.0, np.e]),
+#     x_analytic=x_analytic_logproblem,
+# )
+ode_problem = ODEProblem.with_numerical_reference_solution(
+    x_dot=x_dot_Duffing,
+    t_range=(0, 8 * np.pi),
+    x0=np.array([1.0, 0]),
 )
 
 precision_list = [1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9, 1e-10]
