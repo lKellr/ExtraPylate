@@ -73,7 +73,6 @@ def run_problem(ode_problem: ODEProblem, solver_runfunc, solver_run_kwargs=dict(
     time, solution, solve_info = solver_runfunc(
         ode_fun=ode_problem.x_dot,
         x0=ode_problem.x0,
-        t0=ode_problem.t_range[0],
         t_max=ode_problem.t_range[1],
         **solver_run_kwargs,
     )

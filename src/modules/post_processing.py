@@ -67,24 +67,26 @@ def create_reference_solution(
     rtol: float = 1e-6,
     scheme_name: str = "DOP853",
 ) -> Callable[[float], NDArray[np.floating]]:
-    sol = solve_ivp(
+    solve_result = solve_ivp(
         ode_problem.x_dot,
         ode_problem.t_range,
         ode_problem.x0,
         scheme_name,
         atol=atol,
         rtol=rtol,
+        dense_output=True,
     )
 
-    if not sol.success:
-        print(f"Creation of reference solution failed tue to {sol.message}")
+    if not solve_result.success:
+        print(f"Creation of reference solution failed tue to {solve_result.message}")
 
-    t_high = sol.t
-    x_high = sol.y.T
+    # t_high = sol.t
+    # x_high = sol.y.T
 
     def x_ref(t: float) -> Callable[[float], NDArray[np.floating]]:
-        return np.array(
-            [np.interp(t, t_high, x_high[:, i]) for i in range(ode_problem.x0.size)]
-        ).T
+        # return np.array(
+        #     [np.interp(t, t_high, x_high[:, i]) for i in range(ode_problem.x0.size)]
+        # ).T
+        return solve_result.sol(t).T  # transpose result from dense interpolant
 
     return x_ref
