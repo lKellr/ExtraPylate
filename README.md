@@ -26,7 +26,7 @@ $$
 $$
 with $x(t=0) = (1, e)$, $t\_\mathrm{max} = 5$
 
-![work-precision-explicit](work_precision_expl_single.png.png)
+![work-precision-explicit](work_precision_expl_single.png)
 _single-points for explicit schemes_
 
 ![work-precision](work_precision.png)
