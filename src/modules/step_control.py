@@ -328,12 +328,14 @@ class StepControllerExtrap(StepController, ABC):
                     k_final, k_target_last, not self.is_retry
                 )  # NOTE: I use a stricter limit than necessary, original uses a different allow_order_increase interpretation (k vs k*) than failed
                 if self.is_retry:
-                    next_step_mult = min(1, next_step_mult)
+                    next_step_mult = min(1.0, next_step_mult)
                     self.is_retry = False
             case "too_slow_convergence":
                 k_target, next_step_mult = self.get_most_efficient_parameters(
                     k_final, k_target_last, False
                 )
+                # TODO: limit multiplier like above? probably even to 0.5! # TODO: test this, and compare to previous performance! (ideally automated regression checks)
+                next_step_mult = min(1.0, next_step_mult)
                 self.is_retry = True
             case "divergence":
                 k_target = max(
@@ -439,7 +441,7 @@ class StepControllerExtrapKH_HW(StepControllerExtrap):
                     msg=f"Divergence in step {k_curr}, error ratio: {error_ratio}, previous error ratio: {self.error_ratios_k[k_curr - 1]}"
                 )
         elif k_curr >= k_target - self.pre_check_window or allow_early_check:
-            if error_ratio <= 1.0:  # Convergence in line k_target − 1; or  k_target
+            if error_ratio <= 1.0:
                 state = "accepted"
             elif (
                 error_ratio < np.prod(self.err_reduction_at_step[k_curr : k_target + 1])
@@ -520,6 +522,7 @@ class StepControllerExtrapKH_HW(StepControllerExtrap):
                 next_step_mult = s_same
 
         else:  # different variant at edge of check window to allow for reduction down by two
+            # TODO: Shampine suggests to set next_step_mult <= 0.5 and to forbid order icnrease in following step
             s_decreased = self._get_step_mult_opt(
                 self.error_ratios_k[k_final - 3], k_final - 2
             )  # NOTE: might not be initialized
@@ -566,8 +569,11 @@ class StepControllerExtrapKH_Deuflhard(StepControllerExtrap):
         rtol: float | NDArray[np.floating] = 10**-5,
         norm: Callable[[NDArray[np.floating]], np.floating] = norm_hairer,
         safety_unscaled: float = (0.94),
-        safety_tol: float = (0.65),
+        safety_tol: float = (
+            0.25
+        ),  # TODO: set safety_tol to 1e-5, atol=0., rtol=1. -> almost the same performance
         s_limits_scaled: tuple[float, float] = (0.02, 4.0),
+        safety_multiplier_rejected: float = 0.5,
         step_multiplier_divergence: float = 0.5,
         dtype: DTypeLike = np.double,
         work_order_limits: tuple[float, float] = (0.8, 0.9),
@@ -584,7 +590,120 @@ class StepControllerExtrapKH_Deuflhard(StepControllerExtrap):
             dtype,
         )
         self.is_greedy = is_greedy
-        self.work_order_limits = work_order_limits
+        self.safety_multiplier_rejected = safety_multiplier_rejected
+
+    @override  # TODO: Get rid of this and fix it properly
+    def get_error_ratio(
+        self,
+        error: NDArray[np.floating],
+        x_curr: NDArray[np.floating],
+        x_pred: NDArray[np.floating],
+    ) -> float:
+        # if (
+        #     error == 0.0
+        # ).all():  # for linear solutions, estimated error can be exactly zero; NOTE: this check is really expensive
+        #     return float(np.finfo(error.dtype).max)
+
+        err_ratio = (
+            self.norm(error / (self.rtol * np.maximum(np.abs(x_curr), np.abs(x_pred))))
+            / self.safety_tol
+        )
+        return err_ratio
+
+    @override  # TODO: Get rid of this and fix it properly
+    def _get_step_mult_opt(self, err_ratio_k: float, next_k: int) -> float:
+        """returns the optimal factor by which the step should be multiplied to reach the prescribed tolerance levels"""
+        order_exponent = (
+            1.0 / (2 * next_k + 1) if self.is_symmetric else 1.0 / (next_k + 1)
+        )  # NOTE: 2*k+1 since k starts at zero. Hairer&Wanner use 2*k-1 for k starting with 1
+
+        if err_ratio_k == 0:
+            s_opt = 100.0
+        else:
+            s_opt = (self.safety_tol / err_ratio_k) ** order_exponent
+        return s_opt
+
+    def _get_diag_err_ratio_ideal_infth(self, k: int, q: int) -> np.floating:
+        """get ideal step multipliers from information theory. Similar to _get_step_mult_opt called with alpha instead of the error, but without clipping"""
+        tol_exp = (self.total_feval_cost_for_k[k] - self.total_feval_cost_for_k[q]) / (
+            self.total_feval_cost_for_k[q] - self.total_feval_cost_for_k[0] + 1.0
+        )
+
+        err_id = self.norm(self.rtol**tol_exp)
+        return err_id
+
+    def initialize_scheme(
+        self,
+        is_symmetric: bool,
+        table_size: int,
+        err_reduction_at_step: NDArray[np.floating],
+        total_feval_cost_for_k: NDArray[np.floating],
+    ):
+        super().initialize_scheme(
+            is_symmetric, table_size, err_reduction_at_step, total_feval_cost_for_k
+        )
+        self.k_min = 1
+        self.k_max = table_size - 1
+
+        self.error_ratios_k = np.empty((table_size - 1,), self.dtype)
+        self.err_ratio_id_inftheoretic = np.array(
+            [
+                [
+                    (
+                        self._get_diag_err_ratio_ideal_infth(k, q) if k <= q else None
+                    )  # will be cast to NaN
+                    for q in range(self.table_size)
+                ]
+                for k in range(self.table_size)
+            ],
+            self.dtype,
+        )
+
+    @override
+    def evaluate_step(
+        self,
+        error: NDArray[np.floating],
+        x_curr: NDArray[np.floating],
+        x_pred: NDArray[np.floating],
+        k_curr: int,
+        k_target: int,
+        allow_early_check: bool = False,
+    ) -> contr_ext_state_type:
+
+        state: contr_ext_state_type = "continue"
+
+        error_ratio: float = self.get_error_ratio(error, x_curr, x_pred)
+        self.error_ratios_k[k_curr - 1] = error_ratio
+
+        if (
+            k_curr >= 2 and error_ratio >= self.error_ratios_k[k_curr - 2]
+        ):  # Hairer & Wanner divergence monitor a), does not have to be run for explicit schemes
+            state = "divergence"
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug(
+                    msg=f"Divergence in step {k_curr}, error ratio: {error_ratio}, previous error ratio: {self.error_ratios_k[k_curr - 1]}"
+                )
+        elif k_curr >= k_target - self.pre_check_window or allow_early_check:
+            if error_ratio <= 1.0:  # TODO: should be replaced by check below?
+                state = "accepted"
+            elif (
+                # TODO: does this not always trigger before true convergence?
+                error_ratio
+                <= self.err_ratio_id_inftheoretic[
+                    k_curr,
+                    (
+                        self.k_max if allow_early_check else max(k_target, k_curr)
+                    ),  # NOTE: set k_target to k_max for startup; set k_target to k_target+1 if k_curr = k_target+1
+                ]
+            ):
+                state = "continue"
+            else:
+                state = "too_slow_convergence"
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug(
+                    msg=f"Evaluated stage {k_curr}, error ratio: {error_ratio}, {state}"
+                )
+        return state
 
     def get_most_efficient_parameters(
         self,
@@ -602,18 +721,6 @@ class StepControllerExtrapKH_Deuflhard(StepControllerExtrap):
         s_opt = np.inf
         k_opt = -1
 
-        if k_final < self.k_min:
-            assert k_final == self.k_min - 1, (
-                "Step exited long before k_min. Estimation of next step parameters is not possible."
-            )
-            k_opt = self.k_min
-            s_opt = (
-                self._get_step_mult_opt(
-                    self.error_ratios_k[self.k_min - 2], self.k_min - 1
-                )
-                * self.total_feval_cost_for_k[self.k_min]
-                / self.total_feval_cost_for_k[self.k_min - 1]
-            )
         for k_ in reversed(
             range(self.k_min, k_final + 1)
         ):  # for NR version: range(k_final-1, ...)
@@ -622,91 +729,222 @@ class StepControllerExtrapKH_Deuflhard(StepControllerExtrap):
             w_ = (
                 self.total_feval_cost_for_k[k_] / s_
             )  # NOTE: since the same step length is used with the multiplier, we can calculate the relative work just from the multipliers
-
             if (
-                allow_order_increase and k_ == k_final - 1
-            ):  # Interjection by additional check once the two required work/step quantities are available
-                # TODO: does notwork if we require work at k=1, this is not calculated in the loop
-                # TODO: these two variants are not necessary
-                if self.is_greedy:
-                    if work_opt < self.work_order_limits[1] * w_:
-                        k_opt = k_final + 1
-                        s_opt = (
-                            s_opt
-                            * self.total_feval_cost_for_k[k_final + 1]
-                            / self.total_feval_cost_for_k[k_final]
-                        )
-                        break
-                else:
-                    work_inc = work_opt * (1.0 + 1.0 / self.work_order_limits[1]) - w_
-                    if work_inc < work_opt:
-                        k_opt = k_final + 1
-                        work_opt = work_inc
-                        s_opt = (
-                            s_opt
-                            * self.total_feval_cost_for_k[k_final + 1]
-                            / self.total_feval_cost_for_k[k_final]
-                        )
-
-            if (
-                w_ < self.work_order_limits[0] * work_opt
+                w_ < work_opt
             ):  # NOTE: threshold favors keeping the order constant (high)
                 k_opt = k_
                 work_opt = w_
                 s_opt = s_
             elif self.is_greedy:
                 break
+        if (
+            k_opt == k_final and allow_order_increase
+        ):  # final check if increase might be even better
+            # TODO: i should probably not clip this
+            s_ideal = self._get_step_mult_opt(
+                self.err_ratio_id_inftheoretic[k_final, k_final + 1], k_final + 1
+            )  # TODO: this can be precomputed,  it does not depend on the error or anything that is dynamic
+            if (
+                self.total_feval_cost_for_k[k_opt + 1]
+                > self.total_feval_cost_for_k[k_opt + 1] * s_ideal
+            ):
+                k_opt = k_final + 1
+                s_opt = s_opt / s_ideal
         return k_opt, s_opt
 
-    # def get_most_efficient_params_fullred_greedy(
-    #     self,
-    #     k_final: int,
-    #     allow_order_increase: bool,
-    # ) -> tuple[int, float]:
-    #     s_decreased = self._get_step_mult_opt(
-    #         self.error_ratios_k[k_final - 2], k_final - 1
-    #     )  # NOTE: unavailable in the first step (k=1)
-    #     s_check = self._get_step_mult_opt(self.error_ratios_k[k_final - 1], k_final)
+    @override
+    def get_next_step_parameters(
+        self, k_final: int, k_target_last: int, state: contr_ext_state_type
+    ) -> tuple[int, float]:
+        k_target: int = -1
+        next_step_mult: float = 1.0
 
-    #     work_decreased = self.total_feval_cost_for_k[k_final - 1] / s_decreased
-    #     work_target = (
-    #         self.total_feval_cost_for_k[k_final] / s_check
-    #     )  # NOTE: since the same step length is used with the multiplier, we can calculate the relative work just from the multipliers
+        match state:
+            case "accepted":
+                k_target, next_step_mult = self.get_most_efficient_parameters(
+                    k_final, k_target_last, not self.is_retry
+                )  # NOTE: I use a stricter limit than necessary, original uses a different allow_order_increase interpretation (k vs k*) than failed
+                if self.is_retry:
+                    next_step_mult = min(1.0, next_step_mult)
+                    self.is_retry = False
+            case "too_slow_convergence":
+                self.is_retry = True
 
-    #     # check for possible order increase
-    #     if (
-    #         work_target < self.work_order_limits[1] * work_decreased
-    #         and allow_order_increase
-    #         and k_final + 1 <= self.k_max
-    #     ):  # NOTE: this work check is "out of phase" with the increase, since the work for order increase is unknown. We have assumed work_increased = work_check to find s_increased. so work_increased can not be computed from s_increased to perform the check
-    #         next_ktarget = (
-    #             k_final + 1
-    #         )  # order increase / target constant (start of window)
-    #         next_step_mult = (
-    #             s_check
-    #             * self.total_feval_cost_for_k[k_final + 1]
-    #             / self.total_feval_cost_for_k[k_final]
-    #         )
-    #     else:  # decrease k_check until optimum has been found, iteration works if there is just a single minimum, toherwise all work_k have to be computed and the minimum selected
-    #         while work_decreased < self.work_order_limits[0] * work_target: # NOTE: threshold favors keeping the order constant
-    #             k_final -= 1
-    #             if (
-    #                 k_final - 1
-    #                 < self.k_min  # NOTE: selecting different limits here will cause this to behave like the H&W/NR versions
-    #                 # k_final - 1 < k_target - self.check_window[0] # H&W version
-    #                 # k_final - 1 < k_final_initial - 1 # NR version
-    #             ):
-    #                 break  # early exit to prevent the computation of the multiplier/access of error_ratio of k_min-1
+                # TODO: is the first condition even possible? DOers Deuflhard increasek even after a failure?
+                if (
+                    k_final > k_target_last + 1
+                    or self.error_ratios_k[k_final - 1]
+                    > self.err_ratio_id_inftheoretic[k_final, k_target_last + 1]
+                ):  # serious convergence failure, force step reduction
+                    # TODO: i should probably still use ideal parameters
+                    k_target = k_target_last  # TODO: or k_final (this restricts order harshly, also )? or k_opt?
+                    next_step_mult = (
+                        self._get_step_mult_opt(
+                            self.error_ratios_k[k_final - 1]
+                            / self.err_ratio_id_inftheoretic[k_final, k_target],
+                            k_target,
+                        )
+                        # self._get_step_mult_opt(self.error_ratios_k[k_target - 1], k_target)/ self.s_id_inftheoretic[k_target, k_target_last]**self.order_exponent # NOTE: clip before or after?
+                        * self.safety_multiplier_rejected
+                    )
+                else:
+                    k_target, next_step_mult = self.get_most_efficient_parameters(
+                        k_final, k_target_last, False
+                    )
+            case "divergence":
+                k_target = max(
+                    k_target_last, self.k_min
+                )  # make sure that we start at least from k_min, even if the divergence happened early; NOTE: do not limit to k_final, else step size is too large to converge until k_target_next
+                next_step_mult = (
+                    self.step_multiplier_divergence
+                )  # keep k but reduce the step size
+                self.is_retry = (
+                    True  # this keeps the step size from increasing too much
+                )
+            case _:
+                raise ValueError(
+                    f"Next step parameters can not be computed for invalid state {state}."
+                )
 
-    #             s_check = s_decreased
-    #             s_decreased = self._get_step_mult_opt(
-    #                 self.error_ratios_k[k_final - 2], k_final - 1
-    #             )  # NOTE: if k_final=1, this will not exist
-    #             work_target = work_decreased
-    #             work_decreased = self.total_feval_cost_for_k[k_final - 1] / s_decreased
-    #         next_ktarget = k_final
-    #         next_step_mult = s_check
-    #     return next_ktarget, next_step_mult
+        return k_target, next_step_mult
+
+
+# class StepControllerExtrapKH_Shampine(StepControllerExtrapKH):
+#     """Combined order and step size (k-h) controller for extrapolation methods. Following the strategy layed out by Shampine, "Step size and order in extrapolation
+#     codes", 1987 for the SIMP code"""
+
+#     def __init__(
+#         self,
+#         pre_check_window: int = 1,
+#         atol: float | NDArray[np.floating] = 10**-8,
+#         rtol: float | NDArray[np.floating] = 10**-5,
+#         norm: Callable[[NDArray[np.floating]], np.floating] = norm_hairer,
+#         safety_unscaled: float = (0.94),
+#         safety_tol: float = (0.65),
+#         s_limits: tuple[float, float] = (0.0, 100.0),
+#         step_efficiency_fac: float = 1.1,
+#         order_inc_window: int = 2,
+#         step_multiplier_divergence: float = 0.5,
+#         dtype: DTypeLike = np.double,
+#         work_order_limits: tuple[float, float] = (0.8, 0.9),
+#     ) -> None:
+#         super().__init__(
+#             pre_check_window,
+#             atol,
+#             rtol,
+#             norm,
+#             safety_unscaled,
+#             safety_tol,
+#             step_multiplier_divergence,
+#             dtype,
+#         )
+#         self.s_limits = s_limits
+#         self.work_order_limits = work_order_limits
+#         self.step_efficiency_fac = step_efficiency_fac
+#         self.order_inc_window = order_inc_window
+#         self.s_retry_safe: float = s_limits[1]
+#         self.is_retry_ctr: int = 0
+
+#     @override
+#     def _get_step_mult_opt(self, err_ratio_k: float, next_k: int) -> float:
+#         """returns the optimal factor by which the step should be multiplied to reach the prescribed tolerance levels"""
+
+#         if err_ratio_k == 0:
+#             s_opt = self.s_limits[0]
+#         else:
+#             s_opt = (
+#                 self.step_efficiency_fac
+#                 * self.total_feval_cost_for_k[k_final + 1]
+#                 / self.total_feval_cost_for_k[k_final]
+#                 * step_opt(next_k) # TODO: this is just for raising the order!
+#             )
+#             s_opt = clip(
+#                 s_opt,
+#                 self.s_limits[0],
+#                 self.s_limits[1],
+#             )
+#         return s_opt
+
+# @override
+#     def evaluate_step(
+#         self,
+#         error: NDArray[np.floating],
+#         x_curr: NDArray[np.floating],
+#         x_pred: NDArray[np.floating],
+#         k_curr: int,
+#         k_target: int,
+#         allow_early_check: bool = False,
+#     ) -> contr_ext_state_type:
+
+#         state: contr_ext_state_type = "continue"
+
+#         error_ratio: float = self.get_error_ratio(error, x_curr, x_pred)
+#         self.error_ratios_k[k_curr - 1] = (
+#             error_ratio
+#         )
+
+#         if (
+#             k_curr >= 2 and error_ratio >= self.error_ratios_k[k_curr - 2]
+#         ):  # Hairer & Wanner divergence monitor a), does not have to be run for explicit schemes
+#             state = "divergence"
+#             if logger.isEnabledFor(logging.DEBUG):
+#                 logger.debug(
+#                     msg=f"Divergence in step {k_curr}, error ratio: {error_ratio}, previous error ratio: {self.error_ratios_k[k_curr - 1]}"
+#                 )
+#         elif k_curr >= k_target - self.pre_check_window or allow_early_check: # TODO: step if k+1>k_max+self.order_inc_window
+#             if error_ratio <= 1.0:
+#                 state = "accepted"
+#             elif error_ratio < 10**(self.k_max - k_curr):  # Convergence monitor: can we expect convergence if error reduces an order of magnitude for each k??
+#                 state = "continue" # TODO: only used for inital step?
+#             else:
+#                 state = "too_slow_convergence"
+#             if logger.isEnabledFor(logging.DEBUG):
+#                 logger.debug(
+#                     msg=f"Evaluated stage {k_curr}, error ratio: {error_ratio}, {state}"
+#                 )
+#         return state
+#     @override
+#     def get_next_step_parameters(
+#         self, k_final: int, k_target_last: int, state: contr_ext_state_type
+#     ) -> tuple[int, float]:
+#         k_target = -1
+#         next_step_mult = 1.0
+
+#         match state:
+#             case "accepted":
+#                 k_target, next_step_mult = (
+#                     self.get_most_efficient_parameters(  # TODO: requires unscaled s_limits
+#                         k_final, k_target_last, self.is_retry_ctr == 0
+#                     )
+#                 )  # NOTE: I use a stricter limit than necessary, original uses a different allow_order_increase interpretation (k vs k*) than failed
+#                 if self.is_retry_ctr != 0:
+#                     next_step_mult = min(1.0, next_step_mult)
+#                     self.is_retry_ctr -= 1
+#                 if self.s_retry_safe <= self.s_limits[1]:
+#                     self.s_retry_safe *= 3.0
+#             case "too_slow_convergence":
+#                 k_target, next_step_mult = self.get_most_efficient_parameters(
+#                     k_final, k_target_last, False
+#                 ) # TODO: at least halve the step size, do not reduce by more than 2 orders of magnitude
+#                 self.is_retry_ctr = 2
+#                 self.s_retry_safe = 1.0
+#             case "divergence":
+#                 k_target = max(
+#                     k_target_last, self.k_min
+#                 )  # make sure that we start at least from k_min, even if the divergence happened early; NOTE: do not limit to k_final, else step size is too large to converge until k_target_next
+#                 next_step_mult = (
+#                     self.step_multiplier_divergence
+#                 )  # keep k but reduce the step size
+#                 self.is_retry_ctr = (
+#                     2  # this keeps the step size from increasing too much
+#                 )
+#                 self.s_retry_safe = 1.0
+#             case _:
+#                 raise ValueError(
+#                     f"Next step parameters can not be computed for invalid state {state}."
+#                 )
+
+#         return k_target, next_step_mult
 
 
 class StepControllerExtrapH(StepControllerExtrap):
