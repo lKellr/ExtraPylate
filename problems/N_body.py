@@ -19,6 +19,7 @@ logger_nb.setLevel(logging.INFO)
 masses = np.array([0.987, 1.67e-7, 2.47e-6, 3.03e-6, 3.24e-7, 9.62e-4, 2.88e-4])
 masses2 = np.repeat(masses, 2)
 names = ["Sun", "Mercury", "Venus", "Earth", "Mars", "Jupiter", "Saturn"]
+colors = ["#fed33c", "#1a1a1a", "#e6e6e6", "#2f6a69", "#993d00", "#b07f35", "#b08f36"]
 G = 4 * np.pi**2
 n = masses.size
 dim = 2
@@ -105,13 +106,27 @@ time_text = ax.text(
 
 traces = []
 for i in range(0, n * dim, dim):
-    ax.plot(result[:, i], result[:, i + 1], "--", alpha=0.2)
-    traces.append(ax.plot(result[:1, i], result[:1, i + 1], label=names[i // dim])[0])
+    ax.plot(
+        result[:, i],
+        result[:, i + 1],
+        linestyle="--",
+        alpha=0.2,
+        color=colors[i // dim],
+    )
+    traces.append(
+        ax.plot(
+            result[:1, i],
+            result[:1, i + 1],
+            label=names[i // dim],
+            color=colors[i // dim],
+        )[0]
+    )
 
 pcol = ax.scatter(
     result[0, : n * dim : 2],
     result[0, 1 : n * dim : 2],
     s=5e3 * np.log10(1 + masses ** (2 / 3)),
+    c=colors,
 )
 
 
