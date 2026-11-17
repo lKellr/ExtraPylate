@@ -26,23 +26,23 @@ $$
 $$
 with $x(t=0) = (1, e)$, $t\_\mathrm{max} = 5$
 
-![work-precision-explicit](work_precision_expl_single.png)
+![work-precision-explicit](plots/work_precision_expl_single.png)
 _single-points for explicit schemes_
 
-![work-precision](work_precision.png)
+![work-precision](plots/work_precision.png)
 _work precision graph for benchmark problem_
 
 The superiority of the adaptive schemes becomes very clear. It is also visible that ODEX is quite competitive with the Dormand-Prince method, even more at high precision requirements. DOP853 is however still better.
 EULEX on the other hand exhibits a lower efficiency, even worse than the extrapolated RK scheme.
 
 ## N-body problem simulation
-![N-body](N-body.gif)
+![N-body](plots/N-body.gif)
 
 ## Convergence of extrapolation schemes of increasing order
-![convergence](convergence.png)
+![convergence](plots/convergence.png)
 
 ## Convergence of high order schemes and round-off errors 
-![convergence](convergence_delta.png)
+![convergence](plots/convergence_delta.png)
 _Note that the semingly too-igh convergence rate of ODEX5_rational comes from a different step sequence, which refines more quickly than the harmonic one used with the other schemes. When plotted over the subdivided step size $\frac{H}{n_i}$, the convergence rate is as expected_
 
 At high orders, round-offs in the extrapolation become apparent. The convergence rate plateaus and lower errors can not be reached. One remedy is to use a more accurate floating point representation. With numpy, this can be np.longdouble instead of np.double. This type is more accurante, but it can be 96 bit or 128 bit depending on the platform.
@@ -82,7 +82,7 @@ _without Numba jit, steps and number of function evalations are the same as abov
 
 without jitting, the function evaluation for the n-body problem is so expensive (it can't be vectorized) that it dominates the solution process. Solution times are therefore directly proportional to the number of function evaluations.
 
-![energy conservation](energy_conservation.png)
+![energy conservation](plots/energy_conservation.png)
 _In the same case, ODEX (which is slightly faster than DP54) has much better energy conservation properties_
 
 # Zhabotinsky-Belousov reaction / Oregonator
@@ -99,11 +99,11 @@ with $s = 7.27$, $q=8.375 \cdot 10^{-6}$, $f=1$, and $w=0.161$.
 
 All three solution components can be plotted:
 
-![BZ](BZ.png)
+![BZ](plots/BZ.png)
 
 or just the phase space behavior of the first two components
 
-![BZ_phasespace](BZ_phasespace.png)
+![BZ_phasespace](plots/BZ_phasespace.png)
 
 |    | time (s) | steps | f evals | Jacobian evals | LU decompositions |
 | ---|---|---|---|---|---|
