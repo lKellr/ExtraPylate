@@ -307,7 +307,11 @@ class ExtrapolationSolver(ABC):
 
             # exit conditions
             state = self.step_controller.evaluate_step(
-                error, x_curr, x_pred, k_curr, k_target, allow_early_check
+                error,
+                np.maximum(np.abs(x_curr), np.abs(x_pred)),
+                k_curr,
+                k_target,
+                allow_early_check,
             )
 
         step_info["stop_reason"] = state

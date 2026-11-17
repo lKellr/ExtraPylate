@@ -114,15 +114,14 @@ class StepController(ABC):
     def get_error_ratio(
         self,
         error: NDArray[np.floating],
-        x_curr: NDArray[np.floating],
-        x_pred: NDArray[np.floating],
+        x_ref: NDArray[np.floating],
     ) -> float:
         # if (
         #     error == 0.0
         # ).all():  # for linear solutions, estimated error can be exactly zero; NOTE: this check is really expensive
         #     return float(np.finfo(error.dtype).max)
 
-        tol = self.atol + self.rtol * np.maximum(np.abs(x_curr), np.abs(x_pred))
+        tol = self.atol + self.rtol * x_ref
         err_ratio = self.norm(error / tol) / self.safety_tol
         return err_ratio
 
@@ -166,10 +165,9 @@ class StepControllerPI(StepController):
         self,
         tried_step_size: float,
         error: NDArray[np.floating],
-        x_curr: NDArray[np.floating],
-        x_pred: NDArray[np.floating],
+        x_ref: NDArray[np.floating],
     ) -> tuple[float, bool]:
-        err_ratio = self.get_error_ratio(error, x_curr, x_pred)
+        err_ratio = self.get_error_ratio(error, x_ref)
 
         accepted: bool = (
             err_ratio <= self.step_rejection_limit
@@ -299,8 +297,7 @@ class StepControllerExtrap(StepController, ABC):
     def evaluate_step(
         self,
         error: NDArray[np.floating],
-        x_curr: NDArray[np.floating],
-        x_pred: NDArray[np.floating],
+        x_ref: NDArray[np.floating],
         k_curr: int,
         k_target: int,
         allow_early_check: bool = False,
@@ -418,8 +415,7 @@ class StepControllerExtrapKH_HW(StepControllerExtrap):
     def evaluate_step(
         self,
         error: NDArray[np.floating],
-        x_curr: NDArray[np.floating],
-        x_pred: NDArray[np.floating],
+        x_ref: NDArray[np.floating],
         k_curr: int,
         k_target: int,
         allow_early_check: bool = False,
@@ -427,7 +423,7 @@ class StepControllerExtrapKH_HW(StepControllerExtrap):
 
         state: contr_ext_state_type = "continue"
 
-        error_ratio: float = self.get_error_ratio(error, x_curr, x_pred)
+        error_ratio: float = self.get_error_ratio(error, x_ref)
         self.error_ratios_k[k_curr - 1] = error_ratio
 
         if (
@@ -766,8 +762,7 @@ class StepControllerExtrapH(StepControllerExtrap):
     def evaluate_step(
         self,
         error: NDArray[np.floating],
-        x_curr: NDArray[np.floating],
-        x_pred: NDArray[np.floating],
+        x_ref: NDArray[np.floating],
         k_curr: int,
         k_target: int,
         allow_early_check: bool = False,
@@ -775,7 +770,7 @@ class StepControllerExtrapH(StepControllerExtrap):
 
         state: contr_ext_state_type = "continue"
 
-        error_ratio = self.get_error_ratio(error, x_curr, x_pred)
+        error_ratio = self.get_error_ratio(error, x_ref)
 
         if (
             k_curr >= 2
@@ -874,15 +869,14 @@ class StepControllerExtrapK(StepControllerExtrap):
     def evaluate_step(
         self,
         error: NDArray[np.floating],
-        x_curr: NDArray[np.floating],
-        x_pred: NDArray[np.floating],
+        x_ref: NDArray[np.floating],
         k_curr: int,
         k_target: int,
         allow_early_check: bool = False,
     ) -> contr_ext_state_type:
         state: contr_ext_state_type = "continue"
 
-        error_ratio: float = self.get_error_ratio(error, x_curr, x_pred)
+        error_ratio: float = self.get_error_ratio(error, x_ref)
 
         if (
             k_curr >= 2 and error_ratio >= self.error_ratio
@@ -972,8 +966,7 @@ class StepControllerExtrapDummy(StepControllerExtrap):
     def evaluate_step(
         self,
         error: NDArray[np.floating],
-        x_curr: NDArray[np.floating],
-        x_pred: NDArray[np.floating],
+        x_ref: NDArray[np.floating],
         k_curr: int,
         k_target: int,
         allow_early_check: bool = False,
@@ -982,7 +975,7 @@ class StepControllerExtrapDummy(StepControllerExtrap):
 
         error_ratio = -1.0
         if logger.isEnabledFor(logging.DEBUG):
-            error_ratio = self.get_error_ratio(error, x_curr, x_pred)
+            error_ratio = self.get_error_ratio(error, x_ref)
 
         if k_curr >= k_target:
             state = "accepted"
@@ -1054,15 +1047,14 @@ class StepControllerExtrapBulirsch(StepControllerExtrap):
     def evaluate_step(
         self,
         error: NDArray[np.floating],
-        x_curr: NDArray[np.floating],
-        x_pred: NDArray[np.floating],
+        x_ref: NDArray[np.floating],
         k_curr: int,
         k_target: int,
         allow_early_check: bool = False,
     ) -> contr_ext_state_type:
         state: contr_ext_state_type = "continue"
 
-        error_ratio = self.get_error_ratio(error, x_curr, x_pred)
+        error_ratio = self.get_error_ratio(error, x_ref)
 
         if (
             k_curr >= 2
