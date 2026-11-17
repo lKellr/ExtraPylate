@@ -37,14 +37,14 @@ def get_default_PI_parameters_rejected(p: int) -> ControllerPIParams:
 
 
 def get_step_PI(
-    err_ratio: float, err_ratio_last: float, control_params: ControllerPIParams
+    error_ratio: float, error_ratio_last: float, control_params: ControllerPIParams
 ) -> float:
-    if err_ratio == 0:
+    if error_ratio == 0:
         return control_params.s_limits[1]
     else:
         return clip(
-            (1.0 / err_ratio) ** control_params.alpha
-            * err_ratio_last**control_params.beta,
+            (1.0 / error_ratio) ** control_params.alpha
+            * error_ratio_last**control_params.beta,
             control_params.s_limits[0],
             control_params.s_limits[1],
         )
@@ -152,24 +152,21 @@ class StepControllerPI(StepController):
         self.s_deadzone = s_deadzone
         self.h_limits = h_limits
 
-        self.err_ratio_prev = 1.0
+        self.error_ratio_prev = 1.0
         self.prev_step_size = float("nan")
 
     def evaluate_step(
         self,
         tried_step_size: float,
-        error: NDArray[np.floating],
-        x_ref: NDArray[np.floating],
+        error_ratio: float,
     ) -> tuple[float, bool]:
-        err_ratio = self.get_error_ratio(error, x_ref) / self.safety_tol
-
         accepted: bool = (
-            err_ratio <= self.step_rejection_limit
+            error_ratio <= self.step_rejection_limit
             or tried_step_size <= self.h_limits[0]
         )
-        if accepted and err_ratio > self.step_rejection_limit:
+        if accepted and error_ratio > self.step_rejection_limit:
             logger.warning(
-                f"Accepting step with too large error {err_ratio} since further step size decrease from h = {tried_step_size} is not possible."
+                f"Accepting step with too large error {error_ratio} since further step size decrease from h = {tried_step_size} is not possible."
             )
 
         step_fac: float
@@ -180,23 +177,23 @@ class StepControllerPI(StepController):
                     + (" with retry correction" if self.is_retry else "")
                 )
             step_fac = get_step_PI(
-                err_ratio, self.err_ratio_prev, self.control_params_accepted
+                error_ratio, self.error_ratio_prev, self.control_params_accepted
             )
             # correction if the previous step has been rejected: multiply by ratio of tried step to last succesful step (Gustafsson1991)
             if self.is_retry:
                 step_fac *= tried_step_size / self.prev_step_size
                 self.is_retry = False
-            self.err_ratio_prev = err_ratio
+            self.error_ratio_prev = error_ratio
             self.prev_step_size = (
                 tried_step_size * step_fac
             )  # NOTE: without deadzone and clipping, this should not be problematic since we use it just for improving rejected estimates
         else:
             if logger.isEnabledFor(logging.DEBUG):
                 logger.debug(
-                    msg=f"Rejecting step with error {err_ratio}, h = {tried_step_size}"
+                    msg=f"Rejecting step with error {error_ratio}, h = {tried_step_size}"
                 )
             step_fac = get_step_PI(
-                err_ratio, self.err_ratio_prev, self.control_params_rejected
+                error_ratio, self.error_ratio_prev, self.control_params_rejected
             )
             self.is_retry = True
             if np.isnan(
@@ -270,11 +267,11 @@ class StepControllerExtrap(StepController, ABC):
         k_target = max(self.k_min, min(self.k_max, int(log_fact)))
         return k_target
 
-    def _get_step_mult_opt(self, err_ratio_k: float, next_k: int) -> float:
+    def _get_step_mult_opt(self, error_ratio_k: float, next_k: int) -> float:
         """returns the optimal factor by which the step should be multiplied to reach the prescribed tolerance levels"""
         temp_s_limit_descaled = self.s_limits_scaled[0] ** self.order_exponents[next_k]
 
-        if err_ratio_k == 0:
+        if error_ratio_k == 0:
             s_opt = 1 / temp_s_limit_descaled
         else:
             s_opt = (
@@ -409,8 +406,7 @@ class StepControllerExtrapKH_HW(StepControllerExtrap):
 
     def evaluate_step(
         self,
-        error: NDArray[np.floating],
-        x_ref: NDArray[np.floating],
+        error_ratio: float,
         k_curr: int,
         k_target: int,
         allow_early_check: bool = False,
@@ -418,7 +414,6 @@ class StepControllerExtrapKH_HW(StepControllerExtrap):
 
         state: contr_ext_state_type = "continue"
 
-        error_ratio: float = self.get_error_ratio(error, x_ref)
         self.error_ratios_k[k_curr - 1] = error_ratio
 
         if (
@@ -756,16 +751,13 @@ class StepControllerExtrapH(StepControllerExtrap):
 
     def evaluate_step(
         self,
-        error: NDArray[np.floating],
-        x_ref: NDArray[np.floating],
+        error_ratio: float,
         k_curr: int,
         k_target: int,
         allow_early_check: bool = False,
     ) -> contr_ext_state_type:
 
         state: contr_ext_state_type = "continue"
-
-        error_ratio = self.get_error_ratio(error, x_ref)
 
         if (
             k_curr >= 2
@@ -863,15 +855,12 @@ class StepControllerExtrapK(StepControllerExtrap):
 
     def evaluate_step(
         self,
-        error: NDArray[np.floating],
-        x_ref: NDArray[np.floating],
+        error_ratio: float,
         k_curr: int,
         k_target: int,
         allow_early_check: bool = False,
     ) -> contr_ext_state_type:
         state: contr_ext_state_type = "continue"
-
-        error_ratio: float = self.get_error_ratio(error, x_ref)
 
         if (
             k_curr >= 2 and error_ratio >= self.error_ratio
@@ -960,17 +949,12 @@ class StepControllerExtrapDummy(StepControllerExtrap):
 
     def evaluate_step(
         self,
-        error: NDArray[np.floating],
-        x_ref: NDArray[np.floating],
+        error_ratio: float,
         k_curr: int,
         k_target: int,
         allow_early_check: bool = False,
     ) -> contr_ext_state_type:
         state: contr_ext_state_type = "continue"
-
-        error_ratio = -1.0
-        if logger.isEnabledFor(logging.DEBUG):
-            error_ratio = self.get_error_ratio(error, x_ref)
 
         if k_curr >= k_target:
             state = "accepted"
@@ -1041,15 +1025,12 @@ class StepControllerExtrapBulirsch(StepControllerExtrap):
 
     def evaluate_step(
         self,
-        error: NDArray[np.floating],
-        x_ref: NDArray[np.floating],
+        error_ratio: float,
         k_curr: int,
         k_target: int,
         allow_early_check: bool = False,
     ) -> contr_ext_state_type:
         state: contr_ext_state_type = "continue"
-
-        error_ratio = self.get_error_ratio(error, x_ref)
 
         if (
             k_curr >= 2

@@ -306,9 +306,11 @@ class ExtrapolationSolver(ABC):
                 logger.debug(f"Stage reached: {k_curr}, error: {error}")
 
             # exit conditions
+            error_ratio = self.step_controller.get_error_ratio(
+                error, np.maximum(np.abs(x_curr), np.abs(x_pred))
+            )
             state = self.step_controller.evaluate_step(
-                error,
-                np.maximum(np.abs(x_curr), np.abs(x_pred)),
+                error_ratio,
                 k_curr,
                 k_target,
                 allow_early_check,

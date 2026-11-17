@@ -104,9 +104,10 @@ def DP54(
             - 1 / 40 * k2
         )
 
-        h, accepted = step_controller.evaluate_step(
-            h, err, np.maximum(np.abs(x[ix_step]), np.abs(x_pred))
+        error_ratio = step_controller.get_error_ratio(
+            err, np.maximum(np.abs(x[ix_step]), np.abs(x_pred))
         )
+        h, accepted = step_controller.evaluate_step(h, error_ratio)
 
         if accepted:  # accept result if tolerance is met, or we cant decrease h anymore
             t.append(t_pred)  # NOTE: at this point t_pred != t[ix_step] + h
@@ -186,9 +187,10 @@ def BS32(
         err = h * (-5 / 72 * k1 + 1 / 12 * k2 + 1 / 9 * k3 - 1 / 8 * k4)
         # h*np.linalg.norm(71/57600*k1-71/16695*k3+71/1920*k4-17253/339200*k5+22/525*k6-1/40*k2, ord=np.inf) #local error:||x_pred-X_pred7||
 
-        h, accepted = step_controller.evaluate_step(
-            h, err, np.maximum(np.abs(x[ix_step]), np.abs(x_pred))
+        error_ratio = step_controller.get_error_ratio(
+            err, np.maximum(np.abs(x[ix_step]), np.abs(x_pred))
         )
+        h, accepted = step_controller.evaluate_step(h, error_ratio)
 
         if accepted:  # accept result if tolerance is met, or we cant decrease h anymore
             t.append(t_pred)
@@ -277,9 +279,11 @@ def RKX4(
             x_fine - x_extrap
         )  # NOTE: alternatively: err = x_fine - x_coarse (better error estimate for lower error, suggested by NR, Deuflhard and H&W prefer subdiagonal, thats why I am using it)
         x_pred = x_extrap  # NOTE: continue with higher order estimate at cost of worse error estimation (which is not that great anyway)
-        h, accepted = step_controller.evaluate_step(
-            h, err, np.maximum(np.abs(x[ix_step]), np.abs(x_pred))
+
+        error_ratio = step_controller.get_error_ratio(
+            err, np.maximum(np.abs(x[ix_step]), np.abs(x_pred))
         )
+        h, accepted = step_controller.evaluate_step(h, error_ratio)
 
         if accepted:  # accept result if tolerance is met, or we cant decrease h anymore
             t.append(t_pred)
