@@ -28,28 +28,6 @@ class ControllerPIParams(NamedTuple):
         return self.coeff_p
 
 
-def get_default_PI_parameters(p: int) -> ControllerPIParams:
-    return ControllerPIParams(coeff_i=0.3 / p, coeff_p=0.4 / p, s_limits=(0.2, 5.0))
-
-
-def get_default_PI_parameters_rejected(p: int) -> ControllerPIParams:
-    return ControllerPIParams(coeff_i=1.0 / p, coeff_p=0.0, s_limits=(0.2, 1.0))
-
-
-def get_step_PI(
-    error_ratio: float, error_ratio_last: float, control_params: ControllerPIParams
-) -> float:
-    if error_ratio == 0:
-        return control_params.s_limits[1]
-    else:
-        return clip(
-            (1.0 / error_ratio) ** control_params.alpha
-            * error_ratio_last**control_params.beta,
-            control_params.s_limits[0],
-            control_params.s_limits[1],
-        )
-
-
 class StepController(ABC):
     def __init__(
         self,
@@ -121,6 +99,28 @@ class StepController(ABC):
 
 class StepControllerPI(StepController):
     """PI step size controller"""
+
+    @staticmethod
+    def get_default_PI_parameters(p: int) -> ControllerPIParams:
+        return ControllerPIParams(coeff_i=0.3 / p, coeff_p=0.4 / p, s_limits=(0.2, 5.0))
+
+    @staticmethod
+    def get_default_PI_parameters_rejected(p: int) -> ControllerPIParams:
+        return ControllerPIParams(coeff_i=1.0 / p, coeff_p=0.0, s_limits=(0.2, 1.0))
+
+    @staticmethod
+    def get_step_PI(
+        error_ratio: float, error_ratio_last: float, control_params: ControllerPIParams
+    ) -> float:
+        if error_ratio == 0:
+            return control_params.s_limits[1]
+        else:
+            return clip(
+                (1.0 / error_ratio) ** control_params.alpha
+                * error_ratio_last**control_params.beta,
+                control_params.s_limits[0],
+                control_params.s_limits[1],
+            )
 
     def __init__(
         self,
