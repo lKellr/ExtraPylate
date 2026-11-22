@@ -56,12 +56,10 @@ class StepController(ABC):
         atol: float | NDArray[np.floating],
         rtol: float | NDArray[np.floating],
         norm: Callable[[NDArray[np.floating]], np.floating],
-        safety_tol: float,  # is just a modifier for tolerance (after scaling by PI parameters)
     ):
         self.atol = atol
         self.rtol = rtol
         self.norm = norm
-        self.safety_tol = safety_tol
         self.is_retry = False
 
     def get_initial_stepFhty(
@@ -116,14 +114,9 @@ class StepController(ABC):
         error: NDArray[np.floating],
         x_ref: NDArray[np.floating],
     ) -> float:
-        # if (
-        #     error == 0.0
-        # ).all():  # for linear solutions, estimated error can be exactly zero; NOTE: this check is really expensive
-        #     return float(np.finfo(error.dtype).max)
-
         tol = self.atol + self.rtol * x_ref
-        err_ratio = self.norm(error / tol) / self.safety_tol
-        return err_ratio
+        error_ratio = self.norm(error / tol)
+        return error_ratio
 
 
 class StepControllerPI(StepController):
@@ -149,11 +142,12 @@ class StepControllerPI(StepController):
             np.inf,
         ),
     ) -> None:
-        super().__init__(atol, rtol, norm, safety_tol)
+        super().__init__(atol, rtol, norm)
 
         self.control_params_accepted = control_params
         self.control_params_rejected = control_params_rejected
 
+        self.safety_tol = safety_tol
         self.step_rejection_limit = step_rejection_limit
         self.s_deadzone = s_deadzone
         self.h_limits = h_limits
@@ -167,7 +161,7 @@ class StepControllerPI(StepController):
         error: NDArray[np.floating],
         x_ref: NDArray[np.floating],
     ) -> tuple[float, bool]:
-        err_ratio = self.get_error_ratio(error, x_ref)
+        err_ratio = self.get_error_ratio(error, x_ref) / self.safety_tol
 
         accepted: bool = (
             err_ratio <= self.step_rejection_limit
@@ -231,15 +225,16 @@ class StepControllerExtrap(StepController, ABC):
         rtol: float | NDArray[np.floating] = 10**-5,
         norm: Callable[[NDArray[np.floating]], np.floating] = norm_hairer,
         safety_unscaled: float = (0.94),
-        safety_tol: float = (0.65),
+        safety_scaled: float = (0.65),
         s_limits_scaled: tuple[float, float] = (0.02, 4.0),
         step_multiplier_divergence: float = 0.5,
         dtype: DTypeLike = np.double,
     ) -> None:
-        super().__init__(atol, rtol, norm, safety_tol)
+        super().__init__(atol, rtol, norm)
 
         self.pre_check_window = pre_check_window
         self.safety_unscaled = safety_unscaled
+        self.safety_scaled = safety_scaled
         self.s_limits_scaled = s_limits_scaled
         self.step_multiplier_divergence = step_multiplier_divergence
         self.k_min = -1
@@ -284,7 +279,7 @@ class StepControllerExtrap(StepController, ABC):
         else:
             s_opt = (
                 self.safety_unscaled
-                * (self.safety_tol / err_ratio_k) ** self.order_exponents[next_k]
+                * (self.safety_scaled / err_ratio_k) ** self.order_exponents[next_k]
             )
             s_opt = clip(
                 s_opt,
