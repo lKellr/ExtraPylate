@@ -215,7 +215,9 @@ class StepControllerPI(StepController):
             next_step_size = tried_step_size
         else:
             next_step_size = clip(
-                tried_step_size * step_fac, self.h_limits[0], self.h_limits[1]
+                self.safety_step * tried_step_size * step_fac,
+                self.h_limits[0],
+                self.h_limits[1],
             )
 
         return next_step_size, accepted
