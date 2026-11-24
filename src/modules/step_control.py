@@ -129,8 +129,11 @@ class StepControllerPI(StepController):
         atol: float | NDArray[np.floating] = 10**-5,
         rtol: float | NDArray[np.floating] = 10**-3,
         norm: Callable[[NDArray[np.floating]], np.floating] = norm_hairer,
+        safety_step: float = (
+            0.9  # safety factor for the step size
+        ),
         safety_tol: float = (
-            0.9  # is just a modifier for tolerance (after scaling by PI parameters)
+            1.0  # safety factor for the tolerance, this is scaled by the scheme order to produce a step size, common values 0.25 or 0.38 (Hairer & Wanner)
         ),
         step_rejection_limit: float = 1.2,
         s_deadzone: tuple[float, float] = (
@@ -147,6 +150,7 @@ class StepControllerPI(StepController):
         self.control_params_accepted = control_params
         self.control_params_rejected = control_params_rejected
 
+        self.safety_step = safety_step
         self.safety_tol = safety_tol
         self.step_rejection_limit = step_rejection_limit
         self.s_deadzone = s_deadzone
@@ -179,7 +183,7 @@ class StepControllerPI(StepController):
                     msg="Accepting step"
                     + (" with retry correction" if self.is_retry else "")
                 )
-            step_fac = get_step_PI(
+            step_fac = self.safety_step * get_step_PI(
                 err_ratio, self.err_ratio_prev, self.control_params_accepted
             )
             # correction if the previous step has been rejected: multiply by ratio of tried step to last succesful step (Gustafsson1991)
@@ -195,7 +199,7 @@ class StepControllerPI(StepController):
                 logger.debug(
                     msg=f"Rejecting step with error {err_ratio}, h = {tried_step_size}"
                 )
-            step_fac = get_step_PI(
+            step_fac = self.safety_step * get_step_PI(
                 err_ratio, self.err_ratio_prev, self.control_params_rejected
             )
             self.is_retry = True
@@ -224,8 +228,8 @@ class StepControllerExtrap(StepController, ABC):
         atol: float | NDArray[np.floating] = 10**-8,
         rtol: float | NDArray[np.floating] = 10**-5,
         norm: Callable[[NDArray[np.floating]], np.floating] = norm_hairer,
-        safety_unscaled: float = (0.94),
-        safety_scaled: float = (0.65),
+        safety_step: float = (0.94),
+        safety_tol: float = (0.65),
         s_limits_scaled: tuple[float, float] = (0.02, 4.0),
         step_multiplier_divergence: float = 0.5,
         dtype: DTypeLike = np.double,
@@ -233,8 +237,8 @@ class StepControllerExtrap(StepController, ABC):
         super().__init__(atol, rtol, norm)
 
         self.pre_check_window = pre_check_window
-        self.safety_unscaled = safety_unscaled
-        self.safety_scaled = safety_scaled
+        self.safety_step = safety_step
+        self.safety_tol = safety_tol
         self.s_limits_scaled = s_limits_scaled
         self.step_multiplier_divergence = step_multiplier_divergence
         self.k_min = -1
@@ -278,8 +282,8 @@ class StepControllerExtrap(StepController, ABC):
             s_opt = 1 / temp_s_limit_descaled
         else:
             s_opt = (
-                self.safety_unscaled
-                * (self.safety_scaled / err_ratio_k) ** self.order_exponents[next_k]
+                self.safety_step
+                * (self.safety_tol / err_ratio_k) ** self.order_exponents[next_k]
             )
             s_opt = clip(
                 s_opt,
@@ -354,8 +358,8 @@ class StepControllerExtrapKH_HW(StepControllerExtrap):
         atol: float | NDArray[np.floating] = 10**-8,
         rtol: float | NDArray[np.floating] = 10**-5,
         norm: Callable[[NDArray[np.floating]], np.floating] = norm_hairer,
-        safety_unscaled: float = (0.94),
-        safety_scaled: float = (0.65),
+        safety_step: float = (0.94),
+        safety_tol: float = (0.65),
         s_limits_scaled: tuple[float, float] = (0.02, 4.0),
         step_multiplier_divergence: float = 0.5,
         dtype: DTypeLike = np.double,
@@ -366,8 +370,8 @@ class StepControllerExtrapKH_HW(StepControllerExtrap):
             atol,
             rtol,
             norm,
-            safety_unscaled,
-            safety_scaled,
+            safety_step,
+            safety_tol,
             s_limits_scaled,
             step_multiplier_divergence,
             dtype,
@@ -556,8 +560,8 @@ class StepControllerExtrapKH_Deuflhard(StepControllerExtrap):
         atol: float | NDArray[np.floating] = 10**-8,
         rtol: float | NDArray[np.floating] = 10**-5,
         norm: Callable[[NDArray[np.floating]], np.floating] = norm_hairer,
-        safety_unscaled: float = (0.94),
-        safety_scaled: float = (0.65),
+        safety_step: float = (0.94),
+        safety_tol: float = (0.65),
         s_limits_scaled: tuple[float, float] = (0.02, 4.0),
         step_multiplier_divergence: float = 0.5,
         dtype: DTypeLike = np.double,
@@ -568,8 +572,8 @@ class StepControllerExtrapKH_Deuflhard(StepControllerExtrap):
             atol,
             rtol,
             norm,
-            safety_unscaled,
-            safety_scaled,
+            safety_step,
+            safety_tol,
             s_limits_scaled,
             step_multiplier_divergence,
             dtype,
@@ -711,8 +715,8 @@ class StepControllerExtrapH(StepControllerExtrap):
         atol: float | NDArray[np.floating] = 10**-8,
         rtol: float | NDArray[np.floating] = 10**-5,
         norm: Callable[[NDArray[np.floating]], np.floating] = norm_hairer,
-        safety_unscaled: float = (0.94),
-        safety_scaled: float = (0.65),
+        safety_step: float = (0.94),
+        safety_tol: float = (0.65),
         s_limits_scaled: tuple[float, float] = (0.02, 4.0),
         step_multiplier_divergence: float = 0.5,
         dtype: DTypeLike = np.double,
@@ -722,8 +726,8 @@ class StepControllerExtrapH(StepControllerExtrap):
             atol,
             rtol,
             norm,
-            safety_unscaled,
-            safety_scaled,
+            safety_step,
+            safety_tol,
             s_limits_scaled,
             step_multiplier_divergence,
             dtype,
@@ -817,8 +821,8 @@ class StepControllerExtrapK(StepControllerExtrap):
         atol: float | NDArray[np.floating] = 10**-8,
         rtol: float | NDArray[np.floating] = 10**-5,
         norm: Callable[[NDArray[np.floating]], np.floating] = norm_hairer,
-        safety_unscaled: float = (0.94),
-        safety_scaled: float = (0.65),
+        safety_step: float = (0.94),
+        safety_tol: float = (0.65),
         s_limits_scaled: tuple[float, float] = (0.02, 4.0),
         step_multiplier_divergence: float = 0.5,
         dtype: DTypeLike = np.double,
@@ -828,8 +832,8 @@ class StepControllerExtrapK(StepControllerExtrap):
             atol,
             rtol,
             norm,
-            safety_unscaled,
-            safety_scaled,
+            safety_step,
+            safety_tol,
             s_limits_scaled,
             step_multiplier_divergence,
             dtype,
@@ -924,8 +928,8 @@ class StepControllerExtrapDummy(StepControllerExtrap):
         atol: float | NDArray[np.floating] = 10**-8,
         rtol: float | NDArray[np.floating] = 10**-5,
         norm: Callable[[NDArray[np.floating]], np.floating] = norm_hairer,
-        safety_unscaled: float = (0.94),
-        safety_scaled: float = (0.65),
+        safety_step: float = (0.94),
+        safety_tol: float = (0.65),
         s_limits_scaled: tuple[float, float] = (0.02, 4.0),
         step_multiplier_divergence: float = 0.5,
         dtype: DTypeLike = np.double,
@@ -935,8 +939,8 @@ class StepControllerExtrapDummy(StepControllerExtrap):
             atol,
             rtol,
             norm,
-            safety_unscaled,
-            safety_scaled,
+            safety_step,
+            safety_tol,
             s_limits_scaled,
             step_multiplier_divergence,
             dtype,
@@ -1003,8 +1007,8 @@ class StepControllerExtrapBulirsch(StepControllerExtrap):
         atol: float | NDArray[np.floating] = 10**-8,
         rtol: float | NDArray[np.floating] = 10**-5,
         norm: Callable[[NDArray[np.floating]], np.floating] = norm_hairer,
-        safety_unscaled: float = (0.9),
-        safety_scaled: float = (0.65),
+        safety_step: float = (0.9),
+        safety_tol: float = (0.65),
         s_limits_scaled: tuple[float, float] = (0.02, 4.0),
         step_multiplier_divergence: float = 0.5,
         dtype: DTypeLike = np.double,
@@ -1014,8 +1018,8 @@ class StepControllerExtrapBulirsch(StepControllerExtrap):
             atol,
             rtol,
             norm,
-            safety_unscaled,
-            safety_scaled,
+            safety_step,
+            safety_tol,
             s_limits_scaled,
             step_multiplier_divergence,
             dtype,
@@ -1088,7 +1092,7 @@ class StepControllerExtrapBulirsch(StepControllerExtrap):
             next_step_mult = 1.5
         else:
             next_step_mult = (
-                self.safety_unscaled * 0.75 ** (k_final - k_target)
+                self.safety_step * 0.75 ** (k_final - k_target)
             )  # NOTE:GBS method uses 0.6 for Bulirsch sequence, but 0.7 might be better and 0.7-0.8 is probably better for all step sequences but Romberg
             # next_step_mult = (
             #     np.prod(step_seq[: k_final - k_target])
