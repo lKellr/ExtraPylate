@@ -75,7 +75,7 @@ class TestStepController:
                 False,
                 1.0,
                 False,
-            ),  # test step_rejection_limit above, willö be limited
+            ),  # test step_rejection_limit above, will be limited
             (5, 0.9, 0.9, False, 1.0, True),  # test s_deadzone
             (5, 1e-6, 1.0, False, 5.0, True),  # test s_limits
             (5, 0.1, 0.9, True, 1.3687981222413332, True),  # test is_retry
@@ -96,6 +96,7 @@ class TestStepController:
             atol=1.0,
             rtol=0.0,
             norm=norm_hairer,
+            safety_step=1.0,
             safety_tol=1.0,
             step_rejection_limit=1.2,
             s_deadzone=(0.8, 1.2),
@@ -109,8 +110,7 @@ class TestStepController:
         next_step_size, accepted = step_controller.evaluate_step(
             tried_step_size=1.0,
             error=np.ones((1,)) * error_ratio,
-            x_curr=np.zeros((1,)),
-            x_pred=np.zeros((1,)),
+            x_ref=np.zeros((1,)),
         )
 
         assert next_step_size == next_step_size_expected, (
