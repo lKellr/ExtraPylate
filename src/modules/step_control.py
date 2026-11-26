@@ -157,7 +157,9 @@ class StepControllerPI(StepController):
         self.h_limits = h_limits
 
         self.err_ratio_prev = 1.0
-        self.prev_step_size = float("nan")
+        self.prev_step_size = float(
+            "nan"
+        )  # NOTE: will cause a failure if the first call to evaluate_step is a retry
 
     def evaluate_step(
         self,
