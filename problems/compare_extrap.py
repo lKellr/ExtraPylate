@@ -55,36 +55,41 @@ h_average = t_max / len(
 )  # use the same number of steps as the adaptive scheme
 
 solver_eulex = EulerExtrapolation(
-    x_dot, table_size=8, step_controller=StepControllerExtrapKH_HW(atol=1e-7, rtol=1e-5)
+    x_dot,
+    table_size=8,
+    tolerance_manager=ToleranceManager(atol=1e-7, rtol=1e-5),
 )
 results["EULEX"] = solver_eulex.solve(x0, t_max)
 
 # solver_eulex_de = EulerExtrapolation(
 #     x_dot,
 #     table_size=8,
-#     step_controller=StepControllerExtrapKH_HW_Deuflhard(
-#         atol=1e-7, rtol=1e-5, is_greedy=False
-#     ),
+#     tolerance_manager=ToleranceManager(atol=1e-7, rtol=1e-5),
+# step_controller=StepControllerExtrapKH_HW_Deuflhard(is_greedy=False),
 # )
 # results["EULEX_DE"] = solver_eulex_de.solve(x0, t_max)
 
 solver_eulex_quad = EulerExtrapolation(
     x_dot,
     table_size=8,
-    step_controller=StepControllerExtrapKH_HW(atol=1e-7, rtol=1e-5),
+    tolerance_manager=ToleranceManager(atol=1e-7, rtol=1e-5),
     dtype=np.longdouble,
 )
 results["EULEX_quad"] = solver_eulex_quad.solve(x0, t_max)
 
 solver_eulex_step = EulerExtrapolation(
-    x_dot, table_size=8, step_controller=StepControllerExtrapK(atol=1e-7, rtol=1e-5)
+    x_dot,
+    table_size=8,
+    tolerance_manager=ToleranceManager(atol=1e-7, rtol=1e-5),
+    step_controller=StepControllerExtrapK(),
 )
 results["EULEX_const_step"] = solver_eulex_step.solve(x0, t_max, h_initial=h_average)
 
 solver_eulex_ord = EulerExtrapolation(
     x_dot,
     table_size=8,
-    step_controller=StepControllerExtrapH(atol=1e-7, rtol=1e-5, pre_check_window=0),
+    tolerance_manager=ToleranceManager(atol=1e-7, rtol=1e-5),
+    step_controller=StepControllerExtrapH(pre_check_window=0),
 )
 results["EULEX_const_ord"] = solver_eulex_ord.solve(
     x0,
@@ -94,21 +99,20 @@ results["EULEX_const_ord"] = solver_eulex_ord.solve(
 )
 
 # solver_eulex_mass = EulerExtrapolationMass(
-#     x_dot, np.identity(2), table_size=8, step_controller=StepControllerExtrapKH_HW(atol=1e-7, rtol=1e-5)
+#     x_dot, np.identity(2), table_size=8, tolerance_manager=ToleranceManager(atol=1e-7, rtol=1e-5)
 # )
 # results["EULEX_mass"] = solver_eulex_mass.solve(x0, t_max)
 
 solver_odex = ModMidpointExtrapolation(
-    x_dot, table_size=8, step_controller=StepControllerExtrapKH_HW(atol=1e-7, rtol=1e-5)
+    x_dot, table_size=8, tolerance_manager=ToleranceManager(atol=1e-7, rtol=1e-5)
 )
 results["ODEX"] = solver_odex.solve(x0, t_max)
 
 solver_odex_Deuflhard = ModMidpointExtrapolation(
     x_dot,
     table_size=8,
-    step_controller=StepControllerExtrapKH_Deuflhard(
-        atol=1e-7, rtol=1e-5, is_greedy=False
-    ),
+    tolerance_manager=ToleranceManager(atol=1e-7, rtol=1e-5),
+    step_controller=StepControllerExtrapKH_Deuflhard(is_greedy=False),
 )
 results["ODEX_Deuflhard"] = solver_odex_Deuflhard.solve(x0, t_max)
 
@@ -116,19 +120,17 @@ solver_odex_smoothed = ModMidpointExtrapolation(
     x_dot,
     table_size=8,
     use_smoothing=True,
-    step_controller=StepControllerExtrapKH_HW(atol=1e-7, rtol=1e-5),
+    tolerance_manager=ToleranceManager(atol=1e-7, rtol=1e-5),
 )
 results["ODEX_smoothed"] = solver_odex_smoothed.solve(x0, t_max)
 
 solver_odex_rat = ModMidpointExtrapolationRational(
-    x_dot, table_size=8, step_controller=StepControllerExtrapKH_HW(atol=1e-7, rtol=1e-5)
+    x_dot, table_size=8, tolerance_manager=ToleranceManager(atol=1e-7, rtol=1e-5)
 )
 results["ODEX_rational"] = solver_odex_rat.solve(x0, t_max)
 
 solver_BGS = ModMidpointExtrapolationRational(
-    x_dot,
-    table_size=8,
-    step_controller=StepControllerExtrapBulirsch(atol=1e-7, rtol=1e-5),
+    x_dot, table_size=8, tolerance_manager=ToleranceManager(atol=1e-7, rtol=1e-5)
 )
 results["BGS"] = solver_BGS.solve(x0, t_max, k_initial=6)
 
@@ -136,7 +138,7 @@ solver_odex_mass = ModMidpointExtrapolationMass(
     x_dot,
     mass_matrix=np.eye(2),
     table_size=8,
-    step_controller=StepControllerExtrapKH_HW(atol=1e-7, rtol=1e-5),
+    tolerance_manager=ToleranceManager(atol=1e-7, rtol=1e-5),
 )
 results["ODEX_mass"] = solver_odex_mass.solve(x0, t_max)
 
@@ -144,9 +146,9 @@ solver_seulex = LimplicitEulerExtrapolation(
     x_dot,
     table_size=8,
     num_odes=x0.size,
-    # step_controller=StepControllerExtrapH(atol=1e-7, rtol=1e-5, pre_check_window=0),
-    # step_controller=StepControllerExtrapK(atol=1e-7, rtol=1e-5),
-    step_controller=StepControllerExtrapKH_HW(atol=1e-7, rtol=1e-5),
+    # step_controller=StepControllerExtrapH(pre_check_window=0),
+    # step_controller=StepControllerExtrapK(),
+    tolerance_manager=ToleranceManager(atol=1e-7, rtol=1e-5),
 )
 results["SEULEX"] = solver_seulex.solve(x0, t_max)
 
@@ -156,9 +158,7 @@ results["SEULEX"] = solver_seulex.solve(x0, t_max)
 # results["SEULEX_quad"] = solver_seulex_quad.solve(x0, t_max)
 
 solver_sodex = LimplicitMidpointExtrapolation(
-    x_dot,
-    num_odes=x0.size,
-    step_controller=StepControllerExtrapKH_HW(atol=1e-7, rtol=1e-5),
+    x_dot, num_odes=x0.size, tolerance_manager=ToleranceManager(atol=1e-7, rtol=1e-5)
 )
 results["SODEX"] = solver_sodex.solve(x0, t_max)
 
@@ -166,7 +166,7 @@ solver_sodex_smoothed = LimplicitMidpointExtrapolation(
     x_dot,
     table_size=8,
     num_odes=x0.size,
-    step_controller=StepControllerExtrapKH_HW(atol=1e-7, rtol=1e-5),
+    tolerance_manager=ToleranceManager(atol=1e-7, rtol=1e-5),
     use_smoothing=True,
 )
 results["SODEX_smoothed"] = solver_sodex_smoothed.solve(x0, t_max)

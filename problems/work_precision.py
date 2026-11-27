@@ -36,7 +36,10 @@ def get_run_extrap(extrap_scheme):
         solver_extrap = extrap_scheme(
             ode_fun,
             table_size=8,
-            step_controller=StepControllerExtrapKH_HW(atol=atol, rtol=rtol),
+            tolerance_manager=ToleranceManager(
+                atol=atol,
+                rtol=rtol,
+            ),
         )
         return solver_extrap.solve(x0, t_max)
 

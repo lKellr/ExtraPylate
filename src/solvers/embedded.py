@@ -2,10 +2,10 @@ import logging
 from typing import Any, Callable
 import numpy as np
 from numpy.typing import NDArray
+from modules.helpers import norm_hairer
 from modules.step_control import (
-    get_default_PI_parameters,
+    ToleranceManager,
     StepControllerPI,
-    get_default_PI_parameters_rejected,
 )
 
 logger = logging.getLogger(__name__)
@@ -17,6 +17,9 @@ def DP54(
     t_max: float,
     t0: float = 0.0,
     h0: float | None = None,
+    atol: float = 1e-5,
+    rtol: float = 1e-3,
+    norm: Callable[[NDArray[np.floating]], np.floating] = norm_hairer,
     **step_controller_kwargs: dict[str, Any],
 ) -> tuple[NDArray[np.floating], NDArray[np.floating], dict[str, Any]]:
     """Dormand Prince 5(4) Method, MATLAB ode45 solver"""
@@ -36,9 +39,10 @@ def DP54(
             StepControllerPI.get_default_PI_parameters_rejected(5)
         )
     step_controller = StepControllerPI(**step_controller_kwargs)
+    tolerance_manager = ToleranceManager(atol, rtol, norm)
 
     if h0 is None:
-        h = step_controller.get_initial_stepHW(ode_fun, x0, t0=t0, p=5)
+        h = tolerance_manager.get_initial_stepHW(ode_fun, x0, t0=t0, p=5)
     else:
         h = h0
 
@@ -106,7 +110,7 @@ def DP54(
             - 1 / 40 * k2
         )
 
-        error_ratio = step_controller.get_error_ratio(
+        error_ratio = tolerance_manager.get_error_ratio(
             err, np.maximum(np.abs(x[ix_step]), np.abs(x_pred))
         )
         h, accepted = step_controller.evaluate_step(h, error_ratio)
@@ -116,7 +120,7 @@ def DP54(
             x.append(x_pred)
             k1 = k2
             ix_step += 1
-            info["local_errors"].append(step_controller.norm(err))
+            info["local_errors"].append(tolerance_manager.norm(err))
         else:
             t_crit.append(t_pred)
             x_crit.append(x_pred)
@@ -143,9 +147,12 @@ def BS32(
     t_max: float,
     t0: float = 0.0,
     h0: float | None = None,
+    atol: float = 1e-5,
+    rtol: float = 1e-3,
+    norm: Callable[[NDArray[np.floating]], np.floating] = norm_hairer,
     **step_controller_kwargs: dict[str, Any],
 ) -> tuple[NDArray[np.floating], NDArray[np.floating], dict[str, Any]]:
-    """Bogacki–Shampine Method, MATLAB ode23 solver"""
+    """Bogacki-Shampine Method, MATLAB ode23 solver"""
 
     info: dict[str, Any] = dict(
         n_feval=0,
@@ -164,9 +171,10 @@ def BS32(
             StepControllerPI.get_default_PI_parameters_rejected(3)
         )
     step_controller = StepControllerPI(**step_controller_kwargs)
+    tolerance_manager = ToleranceManager(atol, rtol, norm)
 
     if h0 is None:
-        h = step_controller.get_initial_stepHW(ode_fun, x0, t0=t0, p=3)
+        h = tolerance_manager.get_initial_stepHW(ode_fun, x0, t0=t0, p=3)
     else:
         h = h0
 
@@ -191,7 +199,7 @@ def BS32(
         err = h * (-5 / 72 * k1 + 1 / 12 * k2 + 1 / 9 * k3 - 1 / 8 * k4)
         # h*np.linalg.norm(71/57600*k1-71/16695*k3+71/1920*k4-17253/339200*k5+22/525*k6-1/40*k2, ord=np.inf) #local error:||x_pred-X_pred7||
 
-        error_ratio = step_controller.get_error_ratio(
+        error_ratio = tolerance_manager.get_error_ratio(
             err, np.maximum(np.abs(x[ix_step]), np.abs(x_pred))
         )
         h, accepted = step_controller.evaluate_step(h, error_ratio)
@@ -201,7 +209,7 @@ def BS32(
             x.append(x_pred)
             k1 = k4
             ix_step += 1
-            info["local_errors"].append(step_controller.norm(err))
+            info["local_errors"].append(tolerance_manager.norm(err))
         else:
             t_crit.append(t_pred)
             x_crit.append(x_pred)
@@ -218,6 +226,9 @@ def RKX4(
     t0: float = 0.0,
     h0: float | None = None,
     extrap_step_ratio: int = 2,
+    atol: float = 1e-5,
+    rtol: float = 1e-3,
+    norm: Callable[[NDArray[np.floating]], np.floating] = norm_hairer,
     **step_controller_kwargs: dict[str, Any],
 ) -> tuple[NDArray[np.floating], NDArray[np.floating], dict[str, Any]]:
     """Classical Runge-Kutta Method with step control. Instead of using an embedded stage, this method approximates the error by a single step of Richardson extrapolation"""
@@ -239,9 +250,10 @@ def RKX4(
             StepControllerPI.get_default_PI_parameters_rejected(5)
         )
     step_controller = StepControllerPI(**step_controller_kwargs)
+    tolerance_manager = ToleranceManager(atol, rtol, norm)
 
     if h0 is None:
-        h = step_controller.get_initial_stepHW(ode_fun, x0, t0=t0, p=5)
+        h = tolerance_manager.get_initial_stepHW(ode_fun, x0, t0=t0, p=5)
     else:
         h = h0
 
@@ -286,7 +298,7 @@ def RKX4(
         )  # NOTE: alternatively: err = x_fine - x_coarse (better error estimate for lower error, suggested by NR, Deuflhard and H&W prefer subdiagonal, thats why I am using it)
         x_pred = x_extrap  # NOTE: continue with higher order estimate at cost of worse error estimation (which is not that great anyway)
 
-        error_ratio = step_controller.get_error_ratio(
+        error_ratio = tolerance_manager.get_error_ratio(
             err, np.maximum(np.abs(x[ix_step]), np.abs(x_pred))
         )
         h, accepted = step_controller.evaluate_step(h, error_ratio)
@@ -295,7 +307,7 @@ def RKX4(
             t.append(t_pred)
             x.append(x_pred)
             ix_step += 1
-            info["local_errors"].append(step_controller.norm(err))
+            info["local_errors"].append(tolerance_manager.norm(err))
         else:
             t_crit.append(t_pred)
             x_crit.append(x_pred)

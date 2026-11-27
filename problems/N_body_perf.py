@@ -2,7 +2,6 @@ import numpy as np
 from matplotlib import pyplot as plt
 from scipy.integrate import solve_ivp
 from modules.helpers import norm_hairer_jit
-from modules.step_control import StepControllerExtrapKH_HW
 from solvers.embedded import DP54
 from solvers.explicit import *
 from solvers.Extrapolation_Scheme import *
@@ -108,9 +107,7 @@ prof_tim_start = perf_counter()
 solver_eulex = EulerExtrapolation(
     x_dot,
     table_size=12,
-    step_controller=StepControllerExtrapKH_HW(
-        atol=1e-8, rtol=1e-5, norm=norm_hairer_jit
-    ),
+    tolerance_manager=ToleranceManager(atol=1e-8, rtol=1e-5, norm=norm_hairer_jit),
 )
 with cProfile.Profile() as pr:
     time, result, solve_info = solver_eulex.solve(x0, t_max)
@@ -130,9 +127,7 @@ prof_tim_start = perf_counter()
 solver_odex = ModMidpointExtrapolation(
     x_dot,
     table_size=12,
-    step_controller=StepControllerExtrapKH_HW(
-        atol=1e-8, rtol=1e-5, norm=norm_hairer_jit
-    ),
+    tolerance_manager=ToleranceManager(atol=1e-8, rtol=1e-5, norm=norm_hairer_jit),
 )
 with cProfile.Profile() as pr:
     time, result, solve_info = solver_odex.solve(x0, t_max)
@@ -151,9 +146,7 @@ prof_tim_start = perf_counter()
 solver_odex2 = ModMidpointExtrapolation(
     x_dot,
     table_size=16,
-    step_controller=StepControllerExtrapKH_HW(
-        atol=1e-12, rtol=1e-8, norm=norm_hairer_jit
-    ),
+    tolerance_manager=ToleranceManager(atol=1e-12, rtol=1e-8, norm=norm_hairer_jit),
 )
 time, result, solve_info = solver_odex2.solve(x0, t_max)
 
