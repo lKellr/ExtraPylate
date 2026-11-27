@@ -16,6 +16,7 @@ from modules.helpers import numerical_jacobian_t
 from modules.step_control import (
     StepControllerExtrap,
     StepControllerExtrapKH_HW,
+    ToleranceManager,
     contr_ext_state_type,
 )
 
@@ -62,7 +63,8 @@ class ExtrapolationSolver(ABC):
         ),
         is_symmetric: bool,
         table_size: int,
-        step_controller: StepControllerExtrap | None = None,
+        step_controller: StepControllerExtrap,
+        tolerance_manager: ToleranceManager,
         dtype: DTypeLike = np.double,
     ):
         if hasattr(substep_seq, "__len__") and all(
@@ -166,11 +168,8 @@ class ExtrapolationSolver(ABC):
 
         self.impl_base_scheme = False
 
-        if step_controller is None:
-            step_controller = StepControllerExtrapKH_HW(
-                dtype=dtype,
-            )
         self.step_controller = step_controller
+        self.tolerance_manager = tolerance_manager
 
         self.ode_fun = ode_fun
 
@@ -246,6 +245,7 @@ class ExtrapolationSolver(ABC):
         x_curr: NDArray[np.floating],
         k_target: int,
         step_size: float,
+        x_ref0: NDArray[np.floating],
         allow_early_check: bool = False,
     ) -> tuple[NDArray[np.floating], contr_ext_state_type, int, dict[str, Any]]:
         """Performs an extrapolation step of x0 until t + step_size"""
@@ -306,8 +306,8 @@ class ExtrapolationSolver(ABC):
                 logger.debug(f"Stage reached: {k_curr}, error: {error}")
 
             # exit conditions
-            error_ratio = self.step_controller.get_error_ratio(
-                error, np.maximum(np.abs(x_curr), np.abs(x_pred))
+            error_ratio = self.tolerance_manager.get_error_ratio(
+                error, np.maximum(x_ref0, np.abs(x_pred))
             )
             state = self.step_controller.evaluate_step(
                 error_ratio,
@@ -361,16 +361,27 @@ class ExtrapolationSolver(ABC):
             h_min=[],
         )
 
+        # preparing a reference value: maximum value encountered in component
+        x_ref = np.maximum(10.0 * np.finfo(self.dtype).eps * np.ones_like(x0), x0)
+
         k_target: int
         step: float
 
         if k_initial is None:
-            k_target = self.step_controller.get_initial_ktarget()
+            k_target_ideal = (
+                self.tolerance_manager.get_initial_ktarget_sym()
+                if self.is_symmetric
+                else self.tolerance_manager.get_initial_ktarget()
+            )
+            k_target = max(
+                self.step_controller.k_min,
+                min(self.step_controller.k_max, k_target_ideal),
+            )
         else:
             k_target = k_initial
 
         if h_initial is None:
-            step = self.step_controller.get_initial_stepHW(
+            step = self.tolerance_manager.get_initial_stepHW(
                 self.ode_fun, x0, t0=t0, p=self.get_local_order(k_target)
             )
         else:
@@ -410,6 +421,7 @@ class ExtrapolationSolver(ABC):
                 solution[-1],
                 k_target,
                 step,
+                x_ref,
                 allow_early_check,
             )
             # reset full order variation
@@ -432,8 +444,9 @@ class ExtrapolationSolver(ABC):
                 current_time += step
                 solution.append(new_solution)
                 time.append(current_time)
+                x_ref = np.maximum(x_ref, new_solution)
                 solve_info["local_errors"].append(
-                    self.step_controller.norm(step_info["local_error"])
+                    self.tolerance_manager.norm(step_info["local_error"])
                 )
                 solve_info["local_orders"].append(step_info["local_order"])
                 solve_info["h_min"].append(step / self.substep_seq[k_final])
@@ -493,6 +506,7 @@ class EulerExtrapolation(ExtrapolationSolver):
         ode_fun: Callable[[float, NDArray[np.floating]], NDArray[np.floating]],
         table_size: int = 10,
         step_controller: StepControllerExtrap | None = None,
+        tolerance_manager: ToleranceManager | None = None,
         substep_seq: (
             NDArray[np.integer]
             | Literal[
@@ -509,12 +523,23 @@ class EulerExtrapolation(ExtrapolationSolver):
         ) = "harmonic",
         dtype: DTypeLike = np.double,
     ):
+        if step_controller is None:
+            step_controller = StepControllerExtrapKH_HW(
+                dtype=dtype,
+            )
+        if tolerance_manager is None:
+            tolerance_manager = ToleranceManager(
+                atol=1e-8,
+                rtol=1e-5,
+            )
+
         super().__init__(
             ode_fun=ode_fun,
             substep_seq=substep_seq,
             is_symmetric=False,
             table_size=table_size,
             step_controller=step_controller,
+            tolerance_manager=tolerance_manager,
             dtype=dtype,
         )
         total_feval_cost_for_k = np.cumsum(self.substep_seq * 1.0, dtype=self.dtype)
@@ -559,6 +584,7 @@ class EulerExtrapolationMass(ExtrapolationSolver):
         mass_matrix: NDArray[np.floating],
         table_size: int = 10,
         step_controller: StepControllerExtrap | None = None,
+        tolerance_manager: ToleranceManager | None = None,
         substep_seq: (
             NDArray[np.integer]
             | Literal[
@@ -576,12 +602,23 @@ class EulerExtrapolationMass(ExtrapolationSolver):
         implicit_rel_costs: ImplicitRelCosts | None = None,
         dtype: DTypeLike = np.double,
     ):
+        if step_controller is None:
+            step_controller = StepControllerExtrapKH_HW(
+                dtype=dtype,
+            )
+        if tolerance_manager is None:
+            tolerance_manager = ToleranceManager(
+                atol=1e-8,
+                rtol=1e-5,
+            )
+
         super().__init__(
             ode_fun=ode_fun,
             substep_seq=substep_seq,
             is_symmetric=False,
             table_size=table_size,
             step_controller=step_controller,
+            tolerance_manager=tolerance_manager,
             dtype=dtype,
         )
         self._init_implicit(
@@ -642,6 +679,7 @@ class ModMidpointExtrapolation(ExtrapolationSolver):
         ode_fun: Callable[[float, NDArray[np.floating]], NDArray[np.floating]],
         table_size: int = 10,
         step_controller: StepControllerExtrap | None = None,
+        tolerance_manager: ToleranceManager | None = None,
         use_smoothing: bool = False,
         consistency_threshold: float = 0.75,
         substep_seq: (
@@ -659,19 +697,30 @@ class ModMidpointExtrapolation(ExtrapolationSolver):
     ):
         self.use_smoothing = use_smoothing
         self.consistency_threshold = consistency_threshold
+        if step_controller is None:
+            step_controller = StepControllerExtrapKH_HW(
+                dtype=dtype,
+            )
+        if tolerance_manager is None:
+            tolerance_manager = ToleranceManager(
+                atol=1e-8,
+                rtol=1e-5,
+            )
+
         super().__init__(
             ode_fun=ode_fun,
             substep_seq=substep_seq,
             is_symmetric=True,
             table_size=table_size,
             step_controller=step_controller,
+            tolerance_manager=tolerance_manager,
             dtype=dtype,
         )
         if not self.even_substep_seq:
             logger.warning("Order reduction due to non-even step sequence")
         if use_smoothing:
             assert self.even_substep_seq, "smoothing requires an even sub step sequence"
-        self.norm = self.step_controller.norm
+        self.norm = self.tolerance_manager.norm
         total_feval_cost_for_k = np.cumsum(
             (self.substep_seq + self.use_smoothing) * 1.0, dtype=self.dtype
         )
@@ -746,6 +795,7 @@ class ModMidpointExtrapolationMass(ExtrapolationSolver):
         mass_matrix: NDArray[np.floating],
         table_size: int = 10,
         step_controller: StepControllerExtrap | None = None,
+        tolerance_manager: ToleranceManager | None = None,
         use_smoothing: bool = False,
         consistency_threshold: float = 0.75,
         substep_seq: (
@@ -764,19 +814,30 @@ class ModMidpointExtrapolationMass(ExtrapolationSolver):
     ):
         self.use_smoothing = use_smoothing
         self.consistency_threshold = consistency_threshold
+        if step_controller is None:
+            step_controller = StepControllerExtrapKH_HW(
+                dtype=dtype,
+            )
+        if tolerance_manager is None:
+            tolerance_manager = ToleranceManager(
+                atol=1e-8,
+                rtol=1e-5,
+            )
+
         super().__init__(
             ode_fun=ode_fun,
             substep_seq=substep_seq,
             is_symmetric=True,
             table_size=table_size,
             step_controller=step_controller,
+            tolerance_manager=tolerance_manager,
             dtype=dtype,
         )
         if not self.even_substep_seq:
             logger.warning("Order reduction due to non-even step sequence")
         if use_smoothing:
             assert self.even_substep_seq, "smoothing requires an even sub step sequence"
-        self.norm = self.step_controller.norm
+        self.norm = self.tolerance_manager.norm
         self._init_implicit(
             num_odes=mass_matrix.shape[0],
             require_jacobian=False,
@@ -870,6 +931,7 @@ class ModMidpointExtrapolationRational(ModMidpointExtrapolation):
         ode_fun: Callable[[float, NDArray[np.floating]], NDArray[np.floating]],
         table_size: int = 10,
         step_controller: StepControllerExtrap | None = None,
+        tolerance_manager: ToleranceManager | None = None,
         use_smoothing: bool = True,
         consistency_threshold: float = 0.75,
         substep_seq: (
@@ -884,10 +946,21 @@ class ModMidpointExtrapolationRational(ModMidpointExtrapolation):
         ) = "Bulirsch_even",
         dtype: DTypeLike = np.double,
     ):
+        if step_controller is None:
+            step_controller = StepControllerExtrapKH_HW(
+                dtype=dtype,
+            )
+        if tolerance_manager is None:
+            tolerance_manager = ToleranceManager(
+                atol=1e-8,
+                rtol=1e-5,
+            )
+
         super().__init__(
             ode_fun=ode_fun,
             table_size=table_size,
             step_controller=step_controller,
+            tolerance_manager=tolerance_manager,
             use_smoothing=use_smoothing,
             consistency_threshold=consistency_threshold,
             substep_seq=substep_seq,
@@ -965,6 +1038,7 @@ class LimplicitEulerExtrapolation(ExtrapolationSolver):
             Callable[[float, NDArray[np.floating]], NDArray[np.floating]] | None
         ) = None,
         step_controller: StepControllerExtrap | None = None,
+        tolerance_manager: ToleranceManager | None = None,
         substep_seq: (
             NDArray[np.integer]
             | Literal[
@@ -984,19 +1058,30 @@ class LimplicitEulerExtrapolation(ExtrapolationSolver):
         implicit_rel_costs: ImplicitRelCosts | None = None,
         dtype: DTypeLike = np.double,
     ):
+        if step_controller is None:
+            step_controller = StepControllerExtrapKH_HW(
+                dtype=dtype,
+            )
+        if tolerance_manager is None:
+            tolerance_manager = ToleranceManager(
+                atol=1e-8,
+                rtol=1e-5,
+            )
+
         super().__init__(
             ode_fun=ode_fun,
             substep_seq=substep_seq,
             is_symmetric=False,
             table_size=table_size,
             step_controller=step_controller,
+            tolerance_manager=tolerance_manager,
             dtype=dtype,
         )
 
         # norm and tolerances for divergence detection
-        self.norm = self.step_controller.norm
-        self.atol_newton = self.step_controller.atol
-        self.rtol_newton = self.step_controller.rtol
+        self.norm = self.tolerance_manager.norm
+        self.atol_newton = self.tolerance_manager.atol
+        self.rtol_newton = self.tolerance_manager.rtol
 
         if num_odes is None:
             assert mass_matrix is not None, (
@@ -1051,7 +1136,7 @@ class LimplicitEulerExtrapolation(ExtrapolationSolver):
         lu_and_piv = lu_factor(
             self.mass_matrix - delta_t * jac0, overwrite_a=True, check_finite=False
         )
-        tol = self.atol_newton + self.rtol_newton * x0
+        tol_Newton = self.atol_newton + self.rtol_newton * x0
 
         ddelta_x = np.zeros_like(x0)
         t_n = t0
@@ -1078,11 +1163,11 @@ class LimplicitEulerExtrapolation(ExtrapolationSolver):
                     check_finite=False,
                 )
                 conv_rate = (
-                    self.norm(delta_x_1 / tol)
+                    self.norm(delta_x_1 / tol_Newton)
                     / max(
                         self.norm(
                             delta_x_0  # pyright: ignore[reportPossiblyUnboundVariable]
-                            / tol
+                            / tol_Newton
                         ),
                         1.0,  # maximum prevents divergence detection if iteration error is already elow tolerance
                     )
@@ -1107,6 +1192,7 @@ class LimplicitMidpointExtrapolation(ExtrapolationSolver):
             Callable[[float, NDArray[np.floating]], NDArray[np.floating]] | None
         ) = None,
         step_controller: StepControllerExtrap | None = None,
+        tolerance_manager: ToleranceManager | None = None,
         use_smoothing: bool = False,
         consistency_threshold: float = 0.75,
         substep_seq: (
@@ -1130,18 +1216,29 @@ class LimplicitMidpointExtrapolation(ExtrapolationSolver):
     ):
         self.use_smoothing = use_smoothing
         self.consistency_threshold = consistency_threshold
+        if step_controller is None:
+            step_controller = StepControllerExtrapKH_HW(
+                dtype=dtype,
+            )
+        if tolerance_manager is None:
+            tolerance_manager = ToleranceManager(
+                atol=1e-8,
+                rtol=1e-5,
+            )
+
         super().__init__(
             ode_fun=ode_fun,
             substep_seq=substep_seq,
             is_symmetric=True,
             table_size=table_size,
             step_controller=step_controller,
+            tolerance_manager=tolerance_manager,
             dtype=dtype,
         )
         # norm and tolerances for divergence detection
-        self.norm = self.step_controller.norm
-        self.atol_newton = self.step_controller.atol
-        self.rtol_newton = self.step_controller.rtol
+        self.norm = self.tolerance_manager.norm
+        self.atol_newton = self.tolerance_manager.atol
+        self.rtol_newton = self.tolerance_manager.rtol
 
         if num_odes is None:
             assert mass_matrix is not None, (
@@ -1198,7 +1295,7 @@ class LimplicitMidpointExtrapolation(ExtrapolationSolver):
         lu_and_piv = lu_factor(
             self.mass_matrix - delta_t * jac0, overwrite_a=True, check_finite=False
         )
-        tol = self.atol_newton + self.rtol_newton * x0
+        tol_Newton = self.atol_newton + self.rtol_newton * x0
 
         # start with a linearized-implicit euler step
         rhs = delta_t * self.ode_fun(
@@ -1227,8 +1324,8 @@ class LimplicitMidpointExtrapolation(ExtrapolationSolver):
             if n == 1:  # stability check
                 conv_rate = (
                     0.5
-                    * self.norm((delta_x - delta_x_0) / tol)
-                    / max(self.norm(delta_x_0 / tol), 1.0)
+                    * self.norm((delta_x - delta_x_0) / tol_Newton)
+                    / max(self.norm(delta_x_0 / tol_Newton), 1.0)
                 )
                 if conv_rate > 1.0:
                     return ddelta_x_n, True

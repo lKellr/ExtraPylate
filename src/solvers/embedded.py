@@ -28,10 +28,12 @@ def DP54(
         local_errors=[],
     )
     if "control_params" not in step_controller_kwargs.keys():
-        step_controller_kwargs["control_params"] = get_default_PI_parameters(5)
+        step_controller_kwargs["control_params"] = (
+            StepControllerPI.get_default_PI_parameters(5)
+        )
     if "control_params_rejected" not in step_controller_kwargs.keys():
         step_controller_kwargs["control_params_rejected"] = (
-            get_default_PI_parameters_rejected(5)
+            StepControllerPI.get_default_PI_parameters_rejected(5)
         )
     step_controller = StepControllerPI(**step_controller_kwargs)
 
@@ -154,10 +156,12 @@ def BS32(
     )
 
     if "control_params" not in step_controller_kwargs.keys():
-        step_controller_kwargs["control_params"] = get_default_PI_parameters(3)
+        step_controller_kwargs["control_params"] = (
+            StepControllerPI.get_default_PI_parameters(3)
+        )
     if "control_params_rejected" not in step_controller_kwargs.keys():
         step_controller_kwargs["control_params_rejected"] = (
-            get_default_PI_parameters_rejected(3)
+            StepControllerPI.get_default_PI_parameters_rejected(3)
         )
     step_controller = StepControllerPI(**step_controller_kwargs)
 
@@ -227,10 +231,12 @@ def RKX4(
     )
 
     if "control_params" not in step_controller_kwargs.keys():
-        step_controller_kwargs["control_params"] = get_default_PI_parameters(5)
+        step_controller_kwargs["control_params"] = (
+            StepControllerPI.get_default_PI_parameters(5)
+        )
     if "control_params_rejected" not in step_controller_kwargs.keys():
         step_controller_kwargs["control_params_rejected"] = (
-            get_default_PI_parameters_rejected(5)
+            StepControllerPI.get_default_PI_parameters_rejected(5)
         )
     step_controller = StepControllerPI(**step_controller_kwargs)
 

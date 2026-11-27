@@ -28,17 +28,16 @@ class ControllerPIParams(NamedTuple):
         return self.coeff_p
 
 
-class StepController(ABC):
+class ToleranceManager:
     def __init__(
         self,
         atol: float | NDArray[np.floating],
         rtol: float | NDArray[np.floating],
-        norm: Callable[[NDArray[np.floating]], np.floating],
+        norm: Callable[[NDArray[np.floating]], np.floating] = norm_hairer,
     ):
         self.atol = atol
         self.rtol = rtol
         self.norm = norm
-        self.is_retry = False
 
     def get_initial_stepFhty(
         self,
@@ -52,7 +51,7 @@ class StepController(ABC):
         tol = self.atol + self.rtol * np.abs(x0)
 
         step_size0 = (
-            self.norm(tol) / (1 / (t_max - t0) ** p + self.norm(ode_fun(t0, x0)) ** p)
+            self.norm(tol) / (1.0 / (t_max - t0) ** p + self.norm(ode_fun(t0, x0)) ** p)
         ) ** (1 / p)
         return step_size0
 
@@ -87,6 +86,18 @@ class StepController(ABC):
 
         return min(100 * h0, h1)
 
+    def get_initial_ktarget(self) -> int:
+        """very rough estimate from numerical recipes, can be motivated for example from Hairer&Wanner II, Fig.4.1"""
+
+        log_fact = -np.log10(self.rtol + self.atol) * 0.6 + 0.5
+        return int(log_fact)
+
+    def get_initial_ktarget_sym(self) -> int:
+        """very rough estimate from numerical recipes, can be motivated for example from Hairer&Wanner II, Fig.4.1"""
+
+        log_fact = -max(-12.0, np.log10(self.rtol)) * 0.6 + 0.5
+        return int(log_fact)
+
     def get_error_ratio(
         self,
         error: NDArray[np.floating],
@@ -97,7 +108,7 @@ class StepController(ABC):
         return error_ratio
 
 
-class StepControllerPI(StepController):
+class StepControllerPI:
     """PI step size controller"""
 
     @staticmethod
@@ -126,12 +137,7 @@ class StepControllerPI(StepController):
         self,
         control_params: ControllerPIParams,
         control_params_rejected: ControllerPIParams,
-        atol: float | NDArray[np.floating] = 10**-5,
-        rtol: float | NDArray[np.floating] = 10**-3,
-        norm: Callable[[NDArray[np.floating]], np.floating] = norm_hairer,
-        safety_tol: float = (
-            0.9  # is just a modifier for tolerance (after scaling by PI parameters)
-        ),
+        safety_tol: float = 0.9,  # is just a modifier for tolerance (after scaling by PI parameters)
         step_rejection_limit: float = 1.2,
         s_deadzone: tuple[float, float] = (
             1.0,
@@ -142,8 +148,6 @@ class StepControllerPI(StepController):
             np.inf,
         ),
     ) -> None:
-        super().__init__(atol, rtol, norm)
-
         self.control_params_accepted = control_params
         self.control_params_rejected = control_params_rejected
 
@@ -154,12 +158,14 @@ class StepControllerPI(StepController):
 
         self.error_ratio_prev = 1.0
         self.prev_step_size = float("nan")
+        self.is_retry = False
 
     def evaluate_step(
         self,
         tried_step_size: float,
         error_ratio: float,
     ) -> tuple[float, bool]:
+        # TODO: how to apply safety tol?
         accepted: bool = (
             error_ratio <= self.step_rejection_limit
             or tried_step_size <= self.h_limits[0]
@@ -176,7 +182,7 @@ class StepControllerPI(StepController):
                     msg="Accepting step"
                     + (" with retry correction" if self.is_retry else "")
                 )
-            step_fac = get_step_PI(
+            step_fac = StepControllerPI.get_step_PI(
                 error_ratio, self.error_ratio_prev, self.control_params_accepted
             )
             # correction if the previous step has been rejected: multiply by ratio of tried step to last succesful step (Gustafsson1991)
@@ -192,7 +198,7 @@ class StepControllerPI(StepController):
                 logger.debug(
                     msg=f"Rejecting step with error {error_ratio}, h = {tried_step_size}"
                 )
-            step_fac = get_step_PI(
+            step_fac = StepControllerPI.get_step_PI(
                 error_ratio, self.error_ratio_prev, self.control_params_rejected
             )
             self.is_retry = True
@@ -214,21 +220,16 @@ class StepControllerPI(StepController):
         return next_step_size, accepted
 
 
-class StepControllerExtrap(StepController, ABC):
+class StepControllerExtrap(ABC):
     def __init__(
         self,
         pre_check_window: int,
-        atol: float | NDArray[np.floating] = 10**-8,
-        rtol: float | NDArray[np.floating] = 10**-5,
-        norm: Callable[[NDArray[np.floating]], np.floating] = norm_hairer,
         safety_step: float = (0.94),
         safety_tol: float = (0.65),
         s_limits_scaled: tuple[float, float] = (0.02, 4.0),
         step_multiplier_divergence: float = 0.5,
         dtype: DTypeLike = np.double,
     ) -> None:
-        super().__init__(atol, rtol, norm)
-
         self.pre_check_window = pre_check_window
         self.safety_step = safety_step
         self.safety_tol = safety_tol
@@ -238,6 +239,8 @@ class StepControllerExtrap(StepController, ABC):
         self.k_max = -1
 
         self.dtype = dtype
+
+        self.is_retry = False
 
     def initialize_scheme(
         self,
@@ -257,16 +260,6 @@ class StepControllerExtrap(StepController, ABC):
             [1.0 / (local_order_func(k) + 1) for k in range(self.table_size)]
         )
 
-    def get_initial_ktarget(self) -> int:
-        """very rough estimate from numerical recipes, can be motivated for example from Hairer&Wanner II, Fig.4.1"""
-
-        if self.is_symmetric:
-            log_fact = -max(-12.0, np.log10(self.rtol)) * 0.6 + 0.5
-        else:
-            log_fact = -np.log10(self.rtol + self.atol) * 0.6 + 0.5
-        k_target = max(self.k_min, min(self.k_max, int(log_fact)))
-        return k_target
-
     def _get_step_mult_opt(self, error_ratio_k: float, next_k: int) -> float:
         """returns the optimal factor by which the step should be multiplied to reach the prescribed tolerance levels"""
         temp_s_limit_descaled = self.s_limits_scaled[0] ** self.order_exponents[next_k]
@@ -276,7 +269,7 @@ class StepControllerExtrap(StepController, ABC):
         else:
             s_opt = (
                 self.safety_step
-                * (self.safety_tol / err_ratio_k) ** self.order_exponents[next_k]
+                * (self.safety_tol / error_ratio_k) ** self.order_exponents[next_k]
             )
             s_opt = clip(
                 s_opt,
@@ -288,8 +281,7 @@ class StepControllerExtrap(StepController, ABC):
     @abstractmethod
     def evaluate_step(
         self,
-        error: NDArray[np.floating],
-        x_ref: NDArray[np.floating],
+        error_ratio: float,
         k_curr: int,
         k_target: int,
         allow_early_check: bool = False,
@@ -348,9 +340,6 @@ class StepControllerExtrapKH_HW(StepControllerExtrap):
     def __init__(
         self,
         pre_check_window: int = 1,
-        atol: float | NDArray[np.floating] = 10**-8,
-        rtol: float | NDArray[np.floating] = 10**-5,
-        norm: Callable[[NDArray[np.floating]], np.floating] = norm_hairer,
         safety_step: float = (0.94),
         safety_tol: float = (0.65),
         s_limits_scaled: tuple[float, float] = (0.02, 4.0),
@@ -360,9 +349,6 @@ class StepControllerExtrapKH_HW(StepControllerExtrap):
     ) -> None:
         super().__init__(
             pre_check_window,
-            atol,
-            rtol,
-            norm,
             safety_step,
             safety_tol,
             s_limits_scaled,
@@ -548,9 +534,6 @@ class StepControllerExtrapKH_Deuflhard(StepControllerExtrap):
         self,
         pre_check_window: int = 1,
         is_greedy: bool = True,
-        atol: float | NDArray[np.floating] = 10**-8,
-        rtol: float | NDArray[np.floating] = 10**-5,
-        norm: Callable[[NDArray[np.floating]], np.floating] = norm_hairer,
         safety_step: float = (0.94),
         safety_tol: float = (0.65),
         s_limits_scaled: tuple[float, float] = (0.02, 4.0),
@@ -560,9 +543,6 @@ class StepControllerExtrapKH_Deuflhard(StepControllerExtrap):
     ) -> None:
         super().__init__(
             pre_check_window,
-            atol,
-            rtol,
-            norm,
             safety_step,
             safety_tol,
             s_limits_scaled,
@@ -703,9 +683,6 @@ class StepControllerExtrapH(StepControllerExtrap):
     def __init__(
         self,
         pre_check_window: int = 0,
-        atol: float | NDArray[np.floating] = 10**-8,
-        rtol: float | NDArray[np.floating] = 10**-5,
-        norm: Callable[[NDArray[np.floating]], np.floating] = norm_hairer,
         safety_step: float = (0.94),
         safety_tol: float = (0.65),
         s_limits_scaled: tuple[float, float] = (0.02, 4.0),
@@ -714,9 +691,6 @@ class StepControllerExtrapH(StepControllerExtrap):
     ) -> None:
         super().__init__(
             pre_check_window,
-            atol,
-            rtol,
-            norm,
             safety_step,
             safety_tol,
             s_limits_scaled,
@@ -806,9 +780,6 @@ class StepControllerExtrapK(StepControllerExtrap):
         pre_check_window: int = np.iinfo(
             np.intp
         ).max,  # table_size - 1 would be sufficient
-        atol: float | NDArray[np.floating] = 10**-8,
-        rtol: float | NDArray[np.floating] = 10**-5,
-        norm: Callable[[NDArray[np.floating]], np.floating] = norm_hairer,
         safety_step: float = (0.94),
         safety_tol: float = (0.65),
         s_limits_scaled: tuple[float, float] = (0.02, 4.0),
@@ -817,9 +788,6 @@ class StepControllerExtrapK(StepControllerExtrap):
     ) -> None:
         super().__init__(
             pre_check_window,
-            atol,
-            rtol,
-            norm,
             safety_step,
             safety_tol,
             s_limits_scaled,
@@ -910,9 +878,6 @@ class StepControllerExtrapDummy(StepControllerExtrap):
 
     def __init__(
         self,
-        atol: float | NDArray[np.floating] = 10**-8,
-        rtol: float | NDArray[np.floating] = 10**-5,
-        norm: Callable[[NDArray[np.floating]], np.floating] = norm_hairer,
         safety_step: float = (0.94),
         safety_tol: float = (0.65),
         s_limits_scaled: tuple[float, float] = (0.02, 4.0),
@@ -921,9 +886,6 @@ class StepControllerExtrapDummy(StepControllerExtrap):
     ) -> None:
         super().__init__(
             0,
-            atol,
-            rtol,
-            norm,
             safety_step,
             safety_tol,
             s_limits_scaled,
@@ -984,10 +946,7 @@ class StepControllerExtrapBulirsch(StepControllerExtrap):
 
     def __init__(
         self,
-        atol: float | NDArray[np.floating] = 10**-8,
-        rtol: float | NDArray[np.floating] = 10**-5,
-        norm: Callable[[NDArray[np.floating]], np.floating] = norm_hairer,
-        safety_step: float = (0.9),
+        safety_step: float = (0.94),
         safety_tol: float = (0.65),
         s_limits_scaled: tuple[float, float] = (0.02, 4.0),
         step_multiplier_divergence: float = 0.5,
@@ -995,9 +954,6 @@ class StepControllerExtrapBulirsch(StepControllerExtrap):
     ) -> None:
         super().__init__(
             0,
-            atol,
-            rtol,
-            norm,
             safety_step,
             safety_tol,
             s_limits_scaled,
