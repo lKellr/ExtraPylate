@@ -2,7 +2,7 @@ import numpy as np
 from matplotlib import pyplot as plt
 from numpy.typing import NDArray
 
-from modules.step_control import ToleranceManager
+from modules.tolerance import ToleranceManager
 from solvers.embedded import *
 from solvers.explicit import *
 from solvers.Extrapolation_Scheme import EulerExtrapolation

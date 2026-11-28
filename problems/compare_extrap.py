@@ -10,6 +10,7 @@ from modules.step_control import (
     StepControllerExtrapKH_HW,
     StepControllerExtrapKH_Deuflhard,
 )
+from modules.tolerance import ToleranceManager
 from solvers.embedded import *
 from solvers.explicit import *
 from solvers.Extrapolation_Scheme import *

@@ -3,7 +3,8 @@ from matplotlib import pyplot as plt
 from numpy.typing import NDArray
 
 from modules.post_processing import find_local_errors
-from modules.step_control import ControllerPIParams, ToleranceManager
+from modules.step_control import ControllerPIParams
+from modules.tolerance import ToleranceManager
 from solvers.embedded import *
 from solvers.explicit import *
 from solvers.Extrapolation_Scheme import EulerExtrapolation, ModMidpointExtrapolation

@@ -16,9 +16,9 @@ from modules.helpers import numerical_jacobian_t
 from modules.step_control import (
     StepControllerExtrap,
     StepControllerExtrapKH_HW,
-    ToleranceManager,
     contr_ext_state_type,
 )
+from modules.tolerance import ToleranceManager
 
 logger = logging.getLogger(__name__)
 
@@ -306,7 +306,7 @@ class ExtrapolationSolver(ABC):
                 logger.debug(f"Stage reached: {k_curr}, error: {error}")
 
             # exit conditions
-            error_ratio = self.tolerance_manager.get_error_ratio(
+            error_ratio = self.tolerance_manager.get_scaled_error_norm(
                 error, np.maximum(x_ref0, np.abs(x_pred))
             )
             state = self.step_controller.evaluate_step(
